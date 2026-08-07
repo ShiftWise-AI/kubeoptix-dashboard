@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   Alert,
@@ -7,6 +7,7 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Checkbox,
   CodeBlock,
   CodeBlockCode,
   Flex,
@@ -24,13 +25,17 @@ import {
   PageSidebar,
   Radio,
   Spinner,
+  Switch,
   TextInput,
   Title,
 } from '@patternfly/react-core'
-import { ChartLineIcon, CubesIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
+import { ChartLineIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
+import lightLogo from '../image/light-logo.png'
+import darkLogo from '../image/dark-logo.png'
 
 type MenuKey = 'harvester' | 'analyzer'
 type AnalyzerMode = 'local' | 'llm' | 'embedded'
+type ColorScheme = 'light' | 'dark'
 
 type ApiResponseState = {
   pending: boolean
@@ -41,6 +46,7 @@ type ApiResponseState = {
 
 const HARVESTER_COLLECT_PATH = '/api/harvester/collect'
 const HARVESTER_CLEANUP_PATH = '/api/harvester/assessment'
+const HARVESTER_NAMESPACES_PATH = '/api/harvester/namespaces'
 const ANALYZER_RUN_PATH = '/api/analyzer/run'
 const ANALYZER_CLEANUP_PATH = '/api/analyzer/reports'
 
@@ -51,8 +57,29 @@ const initialResponseState = (): ApiResponseState => ({
   error: null,
 })
 
+function normalizeNamespacesResponse(payload: unknown): string[] {
+  if (Array.isArray(payload)) {
+    return payload.filter((item): item is string => typeof item === 'string').sort()
+  }
+
+  if (typeof payload !== 'object' || payload === null) {
+    return []
+  }
+
+  const candidateKeys = ['namespaces', 'items', 'data']
+
+  for (const key of candidateKeys) {
+    const value = (payload as Record<string, unknown>)[key]
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === 'string').sort()
+    }
+  }
+
+  return []
+}
+
 async function executeRequest(
-  method: 'POST' | 'DELETE',
+  method: 'GET' | 'POST' | 'DELETE',
   path: string,
   body?: Record<string, unknown>,
 ): Promise<{ statusCode: number; payload: unknown }> {
@@ -91,7 +118,7 @@ function ResponsePanel({ title, response }: { title: string; response: ApiRespon
   }, [response.error, response.statusCode])
 
   return (
-    <Card isCompact>
+    <Card isCompact className="pf-v5-c-card">
       <CardHeader>
         <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
           <FlexItem>
@@ -119,8 +146,16 @@ function ResponsePanel({ title, response }: { title: string; response: ApiRespon
 }
 
 function App() {
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
+    const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
+    return savedValue === 'dark' ? 'dark' : 'light'
+  })
   const [activeMenu, setActiveMenu] = useState<MenuKey>('harvester')
-  const [namespaces, setNamespaces] = useState('openshift-monitoring default')
+  const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([])
+  const [selectedNamespaces, setSelectedNamespaces] = useState<string[]>([])
+  const [namespaceFilter, setNamespaceFilter] = useState('')
+  const [isLoadingNamespaces, setIsLoadingNamespaces] = useState(false)
+  const [loadNamespacesError, setLoadNamespacesError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalyzerMode>('local')
 
   const [collectResponse, setCollectResponse] = useState<ApiResponseState>(initialResponseState)
@@ -128,9 +163,80 @@ function App() {
   const [runResponse, setRunResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupReportsResponse, setCleanupReportsResponse] = useState<ApiResponseState>(initialResponseState)
 
+  const mastheadLogo = colorScheme === 'light' ? lightLogo : darkLogo
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', colorScheme)
+    document.documentElement.classList.toggle('pf-v6-theme-dark', colorScheme === 'dark')
+    window.localStorage.setItem('kubeoptix-color-scheme', colorScheme)
+  }, [colorScheme])
+
+  const filteredNamespaces = useMemo(() => {
+    const filterText = namespaceFilter.trim().toLowerCase()
+    if (!filterText) {
+      return availableNamespaces
+    }
+    return availableNamespaces.filter((item) => item.toLowerCase().includes(filterText))
+  }, [availableNamespaces, namespaceFilter])
+
+  const selectedNamespacesText = useMemo(() => selectedNamespaces.join(' '), [selectedNamespaces])
+
+  async function loadNamespaces() {
+    setIsLoadingNamespaces(true)
+    setLoadNamespacesError(null)
+
+    try {
+      const result = await executeRequest('GET', HARVESTER_NAMESPACES_PATH)
+      const parsedNamespaces = normalizeNamespacesResponse(result.payload)
+
+      if (parsedNamespaces.length === 0) {
+        throw new Error('No namespaces were returned by the API.')
+      }
+
+      setAvailableNamespaces(parsedNamespaces)
+      setSelectedNamespaces((previousSelection) => {
+        return previousSelection.filter((item) => parsedNamespaces.includes(item))
+      })
+    } catch (error) {
+      setLoadNamespacesError(error instanceof Error ? error.message : 'Could not load namespaces.')
+      setAvailableNamespaces([])
+      setSelectedNamespaces([])
+    } finally {
+      setIsLoadingNamespaces(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadNamespaces()
+  }, [])
+
+  function toggleNamespace(namespace: string, checked: boolean) {
+    setSelectedNamespaces((previousSelection) => {
+      if (checked) {
+        if (previousSelection.includes(namespace)) {
+          return previousSelection
+        }
+        return [...previousSelection, namespace]
+      }
+
+      return previousSelection.filter((item) => item !== namespace)
+    })
+  }
+
+  function selectFilteredNamespaces() {
+    setSelectedNamespaces((previousSelection) => {
+      const merged = new Set([...previousSelection, ...filteredNamespaces])
+      return Array.from(merged)
+    })
+  }
+
+  function clearAllNamespaces() {
+    setSelectedNamespaces([])
+  }
+
   async function handleCollect(event: FormEvent) {
     event.preventDefault()
-    const requestBody = { namespaces: namespaces.trim() }
+    const requestBody = { namespaces: selectedNamespacesText }
 
     setCollectResponse((previousState) => ({
       ...previousState,
@@ -191,7 +297,11 @@ function App() {
     }))
 
     try {
-      const result = await executeRequest('POST', ANALYZER_RUN_PATH, { mode })
+      const result = await executeRequest('POST', ANALYZER_RUN_PATH, {
+        mode,
+        namespaces: selectedNamespacesText,
+        selected_namespaces: selectedNamespaces,
+      })
       setRunResponse({
         pending: false,
         statusCode: result.statusCode,
@@ -234,7 +344,7 @@ function App() {
   }
 
   const sidebar = (
-    <PageSidebar>
+    <PageSidebar className="pf-v5-c-page__sidebar">
       <Nav aria-label="Service sections">
         <NavList>
           <NavItem itemId="harvester" isActive={activeMenu === 'harvester'} onClick={() => setActiveMenu('harvester')}>
@@ -251,21 +361,28 @@ function App() {
   return (
     <Page
       masthead={
-        <Masthead>
+        <Masthead className="pf-v5-c-masthead">
           <MastheadBrand>
             <Flex alignItems={{ default: 'alignItemsCenter' }}>
               <FlexItem>
-                <CubesIcon />
+                <div className="app-logo-shell">
+                  <img className="app-logo" src={mastheadLogo} alt="ShiftWise AI logo" />
+                </div>
               </FlexItem>
               <FlexItem>
                 <Title headingLevel="h1" size="2xl">
-                  KubeOptix Dashboard
+                  ShiftWise AI
                 </Title>
               </FlexItem>
             </Flex>
           </MastheadBrand>
-          <MastheadContent>
-            <small>PatternFly 6.6.1 frontend for Harvester and Analyzer APIs</small>
+          <MastheadContent className="masthead-tools">
+            <Switch
+              id="color-scheme-switch"
+              label={colorScheme === 'dark' ? 'Dark' : 'Light'}
+              isChecked={colorScheme === 'dark'}
+              onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'light')}
+            />
           </MastheadContent>
         </Masthead>
       }
@@ -274,15 +391,14 @@ function App() {
     >
       <PageSection>
         <Title headingLevel="h2" size="xl">
-          {activeMenu === 'harvester' ? 'Harvester API Operations' : 'Analyzer API Operations'}
+          {activeMenu === 'harvester' ? 'KubeOptix Harvester' : 'Collector and anonymization operations'}
         </Title>
-        <p>All requests are routed through local proxy paths and forwarded to the cluster routes.</p>
       </PageSection>
 
       {activeMenu === 'harvester' ? (
         <>
           <PageSection>
-            <Card>
+            <Card className="pf-v5-c-card">
               <CardHeader>
                 <Title headingLevel="h3">
                   <PlayIcon /> Start collection
@@ -290,28 +406,74 @@ function App() {
               </CardHeader>
               <CardBody>
                 <Form onSubmit={handleCollect}>
-                  <FormGroup
-                    label="Namespaces"
-                    fieldId="namespaces"
-                  >
-                    <TextInput
-                      value={namespaces}
-                      id="namespaces"
-                      onChange={(_event, value) => setNamespaces(value)}
-                      aria-label="Namespaces"
-                    />
-                    <p>Space-separated namespaces, for example: openshift-monitoring default</p>
+                  <FormGroup label="Namespaces" fieldId="namespaces-selector">
+                    <Flex gap={{ default: 'gapSm' }}>
+                      <FlexItem>
+                        <TextInput
+                          value={namespaceFilter}
+                          id="namespace-filter"
+                          onChange={(_event, value) => setNamespaceFilter(value)}
+                          aria-label="Filter namespaces"
+                          placeholder="Filter namespaces"
+                        />
+                      </FlexItem>
+                      <FlexItem>
+                        <Button type="button" variant="secondary" onClick={selectFilteredNamespaces} isDisabled={filteredNamespaces.length === 0}>
+                          Select filtered
+                        </Button>
+                      </FlexItem>
+                      <FlexItem>
+                        <Button type="button" variant="secondary" onClick={clearAllNamespaces} isDisabled={selectedNamespaces.length === 0}>
+                          Clear all
+                        </Button>
+                      </FlexItem>
+                      <FlexItem>
+                        <Button type="button" variant="link" onClick={loadNamespaces} isDisabled={isLoadingNamespaces}>
+                          {isLoadingNamespaces ? 'Refreshing...' : 'Refresh'}
+                        </Button>
+                      </FlexItem>
+                    </Flex>
+                    {loadNamespacesError ? (
+                      <Alert isInline variant="danger" title={loadNamespacesError} />
+                    ) : null}
+                    <div className="namespace-selector-list" id="namespaces-selector">
+                      {isLoadingNamespaces ? <Spinner size="md" /> : null}
+                      {!isLoadingNamespaces && filteredNamespaces.length === 0 ? (
+                        <small>No namespaces found.</small>
+                      ) : null}
+                      {!isLoadingNamespaces
+                        ? filteredNamespaces.map((namespace) => (
+                            <Checkbox
+                              key={namespace}
+                              id={`namespace-${namespace}`}
+                              label={namespace}
+                              isChecked={selectedNamespaces.includes(namespace)}
+                              onChange={(_event, checked) => toggleNamespace(namespace, checked)}
+                            />
+                          ))
+                        : null}
+                    </div>
+                    <small>
+                      Selected: {selectedNamespaces.length}
+                      {selectedNamespaces.length > 0 ? ` (${selectedNamespacesText})` : ''}
+                    </small>
                   </FormGroup>
-                  <Button type="submit" isDisabled={collectResponse.pending || !namespaces.trim()}>
-                    {collectResponse.pending ? <Spinner size="md" /> : 'POST /collect'}
-                  </Button>
+                  <div className="collect-run-actions">
+                    <Button
+                      type="submit"
+                      className="collect-run-button"
+                      isDisabled={collectResponse.pending || selectedNamespaces.length === 0}
+                    >
+                      {collectResponse.pending ? <Spinner size="md" /> : 'Run'}
+                    </Button>
+                  </div>
                 </Form>
               </CardBody>
             </Card>
           </PageSection>
 
           <PageSection>
-            <Card>
+            <Card className="pf-v5-c-card">
               <CardHeader>
                 <Title headingLevel="h3">
                   <TrashIcon /> Clear assessment directory
@@ -335,7 +497,7 @@ function App() {
       ) : (
         <>
           <PageSection>
-            <Card>
+            <Card className="pf-v5-c-card">
               <CardHeader>
                 <Title headingLevel="h3">
                   <ChartLineIcon /> Run analyzer
@@ -343,6 +505,13 @@ function App() {
               </CardHeader>
               <CardBody>
                 <Form onSubmit={handleRunAnalyzer}>
+                  <FormGroup label="Selected namespaces" fieldId="analyzer-namespaces">
+                    <small id="analyzer-namespaces">
+                      {selectedNamespaces.length > 0
+                        ? `${selectedNamespaces.length} selected: ${selectedNamespacesText}`
+                        : 'No namespaces selected. Go to Harvester and choose at least one namespace.'}
+                    </small>
+                  </FormGroup>
                   <FormGroup label="Mode" fieldId="run-mode">
                     <Flex direction={{ default: 'column' }}>
                       <FlexItem>
@@ -375,7 +544,7 @@ function App() {
                     </Flex>
                     <p>Recommended for OpenShift: local</p>
                   </FormGroup>
-                  <Button type="submit" isDisabled={runResponse.pending}>
+                  <Button type="submit" isDisabled={runResponse.pending || selectedNamespaces.length === 0}>
                     {runResponse.pending ? <Spinner size="md" /> : 'POST /run'}
                   </Button>
                 </Form>
@@ -384,7 +553,7 @@ function App() {
           </PageSection>
 
           <PageSection>
-            <Card>
+            <Card className="pf-v5-c-card">
               <CardHeader>
                 <Title headingLevel="h3">
                   <TrashIcon /> Clear reports directory
