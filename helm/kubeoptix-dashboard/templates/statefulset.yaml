@@ -1,0 +1,70 @@
+{{- if not .Values.buildOnly }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kubeoptix-dashboard
+  namespace: shiftwise-ai
+  labels:
+    app.kubernetes.io/name: kubeoptix-dashboard
+    app.kubernetes.io/part-of: kubeoptix
+spec:
+  serviceName: kubeoptix-dashboard
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeoptix-dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubeoptix-dashboard
+        app.kubernetes.io/part-of: kubeoptix
+      annotations:
+        image.openshift.io/triggers: >-
+          [{"from":{"kind":"ImageStreamTag","name":"kubeoptix-dashboard:latest","namespace":"shiftwise-ai"},"fieldPath":"spec.template.spec.containers[?(@.name==\"dashboard\")].image"}]
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: dashboard
+          image: image-registry.openshift-image-registry.svc:5000/shiftwise-ai/kubeoptix-dashboard:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: kubeoptix-dashboard-env
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+{{- end }}

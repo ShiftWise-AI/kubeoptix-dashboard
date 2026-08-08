@@ -16,6 +16,8 @@ coverage
 .env
 .env.*
 !.env.example
+!.env.development
+!.env.openshift
 
 # Editor directories and files
 .vscode/*

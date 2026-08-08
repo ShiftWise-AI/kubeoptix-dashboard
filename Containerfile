@@ -20,11 +20,9 @@ USER 0
 WORKDIR /opt/app-root/src
 
 ENV NODE_ENV=production
-ENV PORT=8080
 
 RUN dnf -y update && \
     dnf -y install nodejs npm && \
-    npm install -g serve@14 && \
     useradd -u 1001 -g 0 -m -s /sbin/nologin kubeoptix && \
     dnf clean all && \
     mkdir -p /opt/app-root/src/dist /opt/app-root/src/.cache && \
@@ -33,12 +31,13 @@ RUN dnf -y update && \
     chmod -R g=u /opt/app-root/src /tmp
 
 COPY --from=build /opt/app-root/src/dist ./dist
+COPY server.mjs ./server.mjs
 
 EXPOSE 8080
 
 USER kubeoptix
 
-CMD ["serve", "-s", "dist", "-l", "8080"]
+CMD ["node", "server.mjs"]
 
 
 
