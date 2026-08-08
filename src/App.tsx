@@ -17,12 +17,18 @@ import {
   Masthead,
   MastheadBrand,
   MastheadContent,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalVariant,
   Nav,
   NavItem,
   NavList,
   Page,
   PageSection,
   PageSidebar,
+  Progress,
   Radio,
   Spinner,
   Switch,
@@ -30,8 +36,7 @@ import {
   Title,
 } from '@patternfly/react-core'
 import { ChartLineIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
-import lightLogo from '../image/light-logo.png'
-import darkLogo from '../image/dark-logo.png'
+import dashboardLogo from '../image/logo.png'
 
 type MenuKey = 'harvester' | 'analyzer'
 type AnalyzerMode = 'local' | 'llm' | 'embedded'
@@ -44,7 +49,20 @@ type ApiResponseState = {
   error: string | null
 }
 
+class ApiRequestError extends Error {
+  readonly statusCode: number
+  readonly payload: unknown
+
+  constructor(message: string, statusCode: number, payload: unknown) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.statusCode = statusCode
+    this.payload = payload
+  }
+}
+
 const HARVESTER_COLLECT_PATH = '/api/harvester/collect'
+const HARVESTER_COLLECT_STATUS_PATH = '/api/harvester/collect/status'
 const HARVESTER_CLEANUP_PATH = '/api/harvester/assessment'
 const HARVESTER_NAMESPACES_PATH = '/api/harvester/namespaces'
 const ANALYZER_RUN_PATH = '/api/analyzer/run'
@@ -78,6 +96,16 @@ function normalizeNamespacesResponse(payload: unknown): string[] {
   return []
 }
 
+function normalizeCollectionProgress(payload: unknown): number {
+  const rawProgress = typeof payload === 'number' ? payload : Number(payload)
+
+  if (!Number.isFinite(rawProgress)) {
+    throw new Error('The collection status API returned an invalid percentage.')
+  }
+
+  return Math.min(100, Math.max(0, rawProgress))
+}
+
 async function executeRequest(
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
@@ -96,10 +124,12 @@ async function executeRequest(
   const payload = text ? JSON.parse(text) : { status: response.statusText }
 
   if (!response.ok) {
-    throw new Error(
+    throw new ApiRequestError(
       typeof payload === 'object' && payload !== null && 'error' in payload
         ? String(payload.error)
         : `Request failed with status ${response.status}`,
+      response.status,
+      payload,
     )
   }
 
@@ -108,6 +138,9 @@ async function executeRequest(
 
 function ResponsePanel({ title, response }: { title: string; response: ApiResponseState }) {
   const variant = useMemo(() => {
+    if (response.statusCode === 409) {
+      return 'warning'
+    }
     if (response.error) {
       return 'danger'
     }
@@ -157,13 +190,19 @@ function App() {
   const [isLoadingNamespaces, setIsLoadingNamespaces] = useState(false)
   const [loadNamespacesError, setLoadNamespacesError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalyzerMode>('local')
+  const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
+  const [isCollectionInProgress, setIsCollectionInProgress] = useState(false)
+  const [isCollectionStatusPolling, setIsCollectionStatusPolling] = useState(false)
+  const [hasCollectionStarted, setHasCollectionStarted] = useState(false)
+  const [collectionProgress, setCollectionProgress] = useState(0)
+  const [collectionStatusError, setCollectionStatusError] = useState<string | null>(null)
 
   const [collectResponse, setCollectResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupAssessmentResponse, setCleanupAssessmentResponse] = useState<ApiResponseState>(initialResponseState)
   const [runResponse, setRunResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupReportsResponse, setCleanupReportsResponse] = useState<ApiResponseState>(initialResponseState)
 
-  const mastheadLogo = colorScheme === 'light' ? lightLogo : darkLogo
+  const mastheadLogo = dashboardLogo
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', colorScheme)
@@ -210,6 +249,55 @@ function App() {
     void loadNamespaces()
   }, [])
 
+  useEffect(() => {
+    if (!isCollectionStatusPolling) {
+      return
+    }
+
+    let isActive = true
+    let pollingTimeout: number | undefined
+
+    async function pollCollectionStatus() {
+      try {
+        const result = await executeRequest('GET', HARVESTER_COLLECT_STATUS_PATH)
+        const progress = normalizeCollectionProgress(result.payload)
+
+        if (!isActive) {
+          return
+        }
+
+        setCollectionProgress(progress)
+        setCollectionStatusError(null)
+
+        if (progress >= 100) {
+          setIsCollectionStatusPolling(false)
+          setIsCollectionInProgress(false)
+          setCollectResponse((previousState) => ({ ...previousState, pending: false }))
+          return
+        }
+      } catch (error) {
+        if (!isActive) {
+          return
+        }
+
+        setCollectionStatusError(
+          error instanceof Error ? error.message : 'Could not retrieve collection status.',
+        )
+      }
+
+      pollingTimeout = window.setTimeout(pollCollectionStatus, 2000)
+    }
+
+    void pollCollectionStatus()
+
+    return () => {
+      isActive = false
+      if (pollingTimeout !== undefined) {
+        window.clearTimeout(pollingTimeout)
+      }
+    }
+  }, [isCollectionStatusPolling])
+
   function toggleNamespace(namespace: string, checked: boolean) {
     setSelectedNamespaces((previousSelection) => {
       if (checked) {
@@ -238,6 +326,11 @@ function App() {
     event.preventDefault()
     const requestBody = { namespaces: selectedNamespacesText }
 
+    setCollectionProgress(0)
+    setCollectionStatusError(null)
+    setIsCollectionStatusPolling(false)
+    setHasCollectionStarted(true)
+    setIsCollectionInProgress(true)
     setCollectResponse((previousState) => ({
       ...previousState,
       pending: true,
@@ -247,12 +340,27 @@ function App() {
     try {
       const result = await executeRequest('POST', HARVESTER_COLLECT_PATH, requestBody)
       setCollectResponse({
-        pending: false,
+        pending: true,
         statusCode: result.statusCode,
         payload: result.payload,
         error: null,
       })
+      setIsCollectionStatusPolling(true)
     } catch (error) {
+      if (error instanceof ApiRequestError && error.statusCode === 409) {
+        setCollectResponse({
+          pending: true,
+          statusCode: error.statusCode,
+          payload: error.payload,
+          error: 'A collection is already running. Tracking its current progress.',
+        })
+        setIsCollectionStatusPolling(true)
+        return
+      }
+
+      setIsCollectionStatusPolling(false)
+      setIsCollectionInProgress(false)
+      setHasCollectionStarted(false)
       setCollectResponse({
         pending: false,
         statusCode: null,
@@ -263,6 +371,7 @@ function App() {
   }
 
   async function handleCleanupAssessment() {
+    setIsDeleteAssessmentModalOpen(false)
     setCleanupAssessmentResponse((previousState) => ({
       ...previousState,
       pending: true,
@@ -347,10 +456,10 @@ function App() {
     <PageSidebar className="pf-v5-c-page__sidebar">
       <Nav aria-label="Service sections">
         <NavList>
-          <NavItem itemId="harvester" isActive={activeMenu === 'harvester'} onClick={() => setActiveMenu('harvester')}>
+          <NavItem itemId="harvester" isActive={activeMenu === 'harvester'} disabled={isCollectionInProgress} onClick={() => setActiveMenu('harvester')}>
             Harvester
           </NavItem>
-          <NavItem itemId="analyzer" isActive={activeMenu === 'analyzer'} onClick={() => setActiveMenu('analyzer')}>
+          <NavItem itemId="analyzer" isActive={activeMenu === 'analyzer'} disabled={isCollectionInProgress} onClick={() => setActiveMenu('analyzer')}>
             Analyzer
           </NavItem>
         </NavList>
@@ -381,6 +490,7 @@ function App() {
               id="color-scheme-switch"
               label={colorScheme === 'dark' ? 'Dark' : 'Light'}
               isChecked={colorScheme === 'dark'}
+              isDisabled={isCollectionInProgress}
               onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'light')}
             />
           </MastheadContent>
@@ -415,20 +525,21 @@ function App() {
                           onChange={(_event, value) => setNamespaceFilter(value)}
                           aria-label="Filter namespaces"
                           placeholder="Filter namespaces"
+                          isDisabled={isCollectionInProgress}
                         />
                       </FlexItem>
                       <FlexItem>
-                        <Button type="button" variant="secondary" onClick={selectFilteredNamespaces} isDisabled={filteredNamespaces.length === 0}>
+                        <Button type="button" variant="secondary" onClick={selectFilteredNamespaces} isDisabled={isCollectionInProgress || filteredNamespaces.length === 0}>
                           Select filtered
                         </Button>
                       </FlexItem>
                       <FlexItem>
-                        <Button type="button" variant="secondary" onClick={clearAllNamespaces} isDisabled={selectedNamespaces.length === 0}>
+                        <Button type="button" variant="secondary" onClick={clearAllNamespaces} isDisabled={isCollectionInProgress || selectedNamespaces.length === 0}>
                           Clear all
                         </Button>
                       </FlexItem>
                       <FlexItem>
-                        <Button type="button" variant="link" onClick={loadNamespaces} isDisabled={isLoadingNamespaces}>
+                        <Button type="button" variant="link" onClick={loadNamespaces} isDisabled={isCollectionInProgress || isLoadingNamespaces}>
                           {isLoadingNamespaces ? 'Refreshing...' : 'Refresh'}
                         </Button>
                       </FlexItem>
@@ -448,6 +559,7 @@ function App() {
                               id={`namespace-${namespace}`}
                               label={namespace}
                               isChecked={selectedNamespaces.includes(namespace)}
+                              isDisabled={isCollectionInProgress}
                               onChange={(_event, checked) => toggleNamespace(namespace, checked)}
                             />
                           ))
@@ -460,39 +572,69 @@ function App() {
                   </FormGroup>
                   <div className="collect-run-actions">
                     <Button
+                      type="button"
+                      variant="danger"
+                      icon={<TrashIcon />}
+                      onClick={() => setIsDeleteAssessmentModalOpen(true)}
+                      isDisabled={isCollectionInProgress || cleanupAssessmentResponse.pending}
+                    >
+                      {cleanupAssessmentResponse.pending ? <Spinner size="md" /> : 'DELETE ALL'}
+                    </Button>
+                    <Button
                       type="submit"
                       className="collect-run-button"
-                      isDisabled={collectResponse.pending || selectedNamespaces.length === 0}
+                      isDisabled={isCollectionInProgress || collectResponse.pending || selectedNamespaces.length === 0}
                     >
                       {collectResponse.pending ? <Spinner size="md" /> : 'Run'}
                     </Button>
                   </div>
+                  {hasCollectionStarted ? (
+                    <div className="collection-progress" aria-live="polite">
+                      <Progress
+                        value={collectionProgress}
+                        title="Collection progress"
+                        measureLocation="inside"
+                      />
+                      <p className="collection-progress-message">
+                        {isCollectionInProgress
+                          ? 'Collecting data. Status updates every 2 seconds.'
+                          : 'Collection completed.'}
+                      </p>
+                      {collectionStatusError ? (
+                        <Alert
+                          isInline
+                          variant="warning"
+                          title="Could not update collection status. Retrying in 2 seconds."
+                        >
+                          {collectionStatusError}
+                        </Alert>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </Form>
               </CardBody>
             </Card>
           </PageSection>
 
-          <PageSection>
-            <Card className="pf-v5-c-card">
-              <CardHeader>
-                <Title headingLevel="h3">
-                  <TrashIcon /> Clear assessment directory
-                </Title>
-              </CardHeader>
-              <CardBody>
-                <Button variant="danger" onClick={handleCleanupAssessment} isDisabled={cleanupAssessmentResponse.pending}>
-                  {cleanupAssessmentResponse.pending ? <Spinner size="md" /> : 'DELETE /assessment'}
-                </Button>
-              </CardBody>
-            </Card>
-          </PageSection>
+          <Modal
+            variant={ModalVariant.small}
+            isOpen={isDeleteAssessmentModalOpen}
+            onClose={() => setIsDeleteAssessmentModalOpen(false)}
+          >
+            <ModalHeader title="Delete all assessments?" labelId="delete-assessments-modal-title" />
+            <ModalBody id="delete-assessments-modal-description">
+              This permanently deletes all collected assessment data. This action cannot be undone.
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="danger" onClick={handleCleanupAssessment}>
+                Delete all assessments
+              </Button>
+              <Button variant="link" onClick={() => setIsDeleteAssessmentModalOpen(false)}>
+                Cancel
+              </Button>
+            </ModalFooter>
+          </Modal>
 
-          <PageSection>
-            <ResponsePanel title="Collect response" response={collectResponse} />
-          </PageSection>
-          <PageSection>
-            <ResponsePanel title="Assessment cleanup response" response={cleanupAssessmentResponse} />
-          </PageSection>
         </>
       ) : (
         <>
