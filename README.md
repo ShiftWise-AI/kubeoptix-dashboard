@@ -25,11 +25,12 @@ npm install
 npm run dev
 ```
 
-When running `npm run dev`, Vite loads `.env.development`. The browser uses
-clean local paths such as `/namespaces`, `/collect`, and `/run`, and the Vite
-development proxy forwards them to the OCP routes. This avoids browser CORS
-restrictions without using the dashboard `/api/harvester` or `/api/analyzer`
-prefixes. The development targets are:
+When running `npm run dev`, Vite loads `.env.development`. Harvester requests
+use local paths such as `/namespaces` and `/collect`. Analyzer requests use the
+same `/api/analyzer/*` prefix in development and production; the Vite proxy
+removes that prefix before forwarding requests to the OCP route. This keeps the
+browser contract consistent and avoids CORS restrictions. The development
+targets are:
 
 - `HARVESTER_API_URL=https://harvester-shiftwise-ai.apps-crc.testing`
 - `ANALYZER_API_URL=https://analyzer-shiftwise-ai.apps-crc.testing`

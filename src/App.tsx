@@ -78,11 +78,12 @@ const HARVESTER_COLLECT_STATUS_PATH = getApiPath('harvester', '/collect/status')
 const HARVESTER_CLEANUP_PATH = getApiPath('harvester', '/assessment')
 const HARVESTER_ASSESSMENT_PATH = getApiPath('harvester', '/assessment')
 const HARVESTER_NAMESPACES_PATH = getApiPath('harvester', '/namespaces')
-const ANALYZER_ASSESSMENT_NAMESPACES_PATH = getApiPath('analyzer', '/assessment/namespaces')
-const ANALYZER_RUN_PATH = getApiPath('analyzer', '/run')
-const ANALYZER_STATUS_PATH = getApiPath('analyzer', '/status')
-const ANALYZER_CLEANUP_PATH = getApiPath('analyzer', '/reports')
-const ANALYZER_REPORT_FILES_PATH = getApiPath('analyzer', '/reports/files')
+const ANALYZER_API_PATH = '/api/analyzer'
+const ANALYZER_ASSESSMENT_NAMESPACES_PATH = `${ANALYZER_API_PATH}/assessment/namespaces`
+const ANALYZER_RUN_PATH = `${ANALYZER_API_PATH}/run`
+const ANALYZER_STATUS_PATH = `${ANALYZER_API_PATH}/status`
+const ANALYZER_CLEANUP_PATH = `${ANALYZER_API_PATH}/reports`
+const ANALYZER_REPORT_FILES_PATH = `${ANALYZER_API_PATH}/reports/files`
 
 const initialResponseState = (): ApiResponseState => ({
   pending: false,

@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const isDevelopment = mode === 'development' || process.env.ENV === 'development'
   const harvesterApiUrl = env.HARVESTER_API_URL ?? 'http://harvester:8000'
-  const analyzerApiUrl = env.ANALYZER_API_URL ?? 'http://analyzer:8080'
+  const analyzerApiUrl = env.ANALYZER_API_URL ?? 'http://analyzer-api:8000'
 
   return {
     plugins: [react()],
@@ -25,30 +25,16 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
-        '/assessment/namespaces': {
-          target: analyzerApiUrl,
-          changeOrigin: true,
-          secure: false,
-        },
         '/assessment': {
           target: harvesterApiUrl,
           changeOrigin: true,
           secure: false,
         },
-        '/run': {
+        '/api/analyzer': {
           target: analyzerApiUrl,
           changeOrigin: true,
           secure: false,
-        },
-        '/status': {
-          target: analyzerApiUrl,
-          changeOrigin: true,
-          secure: false,
-        },
-        '/reports': {
-          target: analyzerApiUrl,
-          changeOrigin: true,
-          secure: false,
+          rewrite: (path) => path.replace(/^\/api\/analyzer/, ''),
         },
       },
     },
