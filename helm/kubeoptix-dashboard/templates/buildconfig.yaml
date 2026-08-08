@@ -1,0 +1,22 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: kubeoptix-dashboard
+  namespace: shiftwise-ai
+  labels:
+    app.kubernetes.io/name: kubeoptix-dashboard
+    app.kubernetes.io/part-of: kubeoptix
+spec:
+  runPolicy: Serial
+  source:
+    type: Binary
+    binary: {}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: kubeoptix-dashboard:latest
+  triggers: []
