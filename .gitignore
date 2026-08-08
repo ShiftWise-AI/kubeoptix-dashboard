@@ -16,7 +16,8 @@ coverage
 .env
 .env.*
 !.env.example
-!helm/kubeoptix-dashboard/files/.env
+!.env.development
+!.env.openshift
 
 # Editor directories and files
 .vscode/*

@@ -8,7 +8,8 @@ metadata:
     app.kubernetes.io/name: kubeoptix-dashboard
     app.kubernetes.io/part-of: kubeoptix
 data:
-{{- range $line := splitList "\n" (.Files.Get "files/.env") }}
+{{- $environmentFile := required "environmentFile must contain the .env.openshift file" .Values.environmentFile }}
+{{- range $line := splitList "\n" $environmentFile }}
 {{- if and $line (not (hasPrefix "#" $line)) }}
 {{- $parts := regexSplit "=" $line 2 }}
   {{ index $parts 0 }}: {{ index $parts 1 | quote }}

@@ -2,14 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   Alert,
-  Badge,
   Button,
   Card,
   CardBody,
   CardHeader,
   Checkbox,
-  CodeBlock,
-  CodeBlockCode,
   Flex,
   FlexItem,
   Form,
@@ -41,7 +38,7 @@ import { ChartLineIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, Trash
 import dashboardLogo from '../image/logo.png'
 
 type MenuKey = 'harvester' | 'analyzer'
-type AnalyzerMode = 'local' | 'llm' | 'embedded'
+type AnalyzerMode = 'local' | 'llm'
 type ColorScheme = 'light' | 'dark'
 
 type ApiResponseState = {
@@ -49,6 +46,11 @@ type ApiResponseState = {
   statusCode: number | null
   payload: unknown
   error: string | null
+}
+
+type AnalyzerReportFile = {
+  name: string
+  createdAt: string | null
 }
 
 class ApiRequestError extends Error {
@@ -63,13 +65,24 @@ class ApiRequestError extends Error {
   }
 }
 
-const HARVESTER_COLLECT_PATH = '/api/harvester/collect'
-const HARVESTER_COLLECT_STATUS_PATH = '/api/harvester/collect/status'
-const HARVESTER_CLEANUP_PATH = '/api/harvester/assessment'
-const HARVESTER_ASSESSMENT_PATH = '/api/harvester/assessment'
-const HARVESTER_NAMESPACES_PATH = '/api/harvester/namespaces'
-const ANALYZER_RUN_PATH = '/api/analyzer/run'
-const ANALYZER_CLEANUP_PATH = '/api/analyzer/reports'
+function getApiPath(service: 'harvester' | 'analyzer', path: string): string {
+  if (__DEVELOPMENT_MODE__) {
+    return path
+  }
+
+  return `/api/${service}${path}`
+}
+
+const HARVESTER_COLLECT_PATH = getApiPath('harvester', '/collect')
+const HARVESTER_COLLECT_STATUS_PATH = getApiPath('harvester', '/collect/status')
+const HARVESTER_CLEANUP_PATH = getApiPath('harvester', '/assessment')
+const HARVESTER_ASSESSMENT_PATH = getApiPath('harvester', '/assessment')
+const HARVESTER_NAMESPACES_PATH = getApiPath('harvester', '/namespaces')
+const ANALYZER_ASSESSMENT_NAMESPACES_PATH = getApiPath('analyzer', '/assessment/namespaces')
+const ANALYZER_RUN_PATH = getApiPath('analyzer', '/run')
+const ANALYZER_STATUS_PATH = getApiPath('analyzer', '/status')
+const ANALYZER_CLEANUP_PATH = getApiPath('analyzer', '/reports')
+const ANALYZER_REPORT_FILES_PATH = getApiPath('analyzer', '/reports/files')
 
 const initialResponseState = (): ApiResponseState => ({
   pending: false,
@@ -79,20 +92,55 @@ const initialResponseState = (): ApiResponseState => ({
 })
 
 function normalizeNamespacesResponse(payload: unknown): string[] {
+  function normalizeArray(values: unknown[]): string[] {
+    const parsed = values
+      .map((item) => {
+        if (typeof item === 'string') {
+          return item
+        }
+
+        if (typeof item === 'object' && item !== null) {
+          const candidate = item as Record<string, unknown>
+          if (typeof candidate.name === 'string') {
+            return candidate.name
+          }
+          if (typeof candidate.namespace === 'string') {
+            return candidate.namespace
+          }
+          if (typeof candidate.folder === 'string') {
+            return candidate.folder
+          }
+        }
+
+        return null
+      })
+      .filter((item): item is string => Boolean(item))
+
+    return Array.from(new Set(parsed)).sort()
+  }
+
   if (Array.isArray(payload)) {
-    return payload.filter((item): item is string => typeof item === 'string').sort()
+    return normalizeArray(payload)
   }
 
   if (typeof payload !== 'object' || payload === null) {
     return []
   }
 
-  const candidateKeys = ['namespaces', 'items', 'data']
+  const candidateKeys = ['namespaces', 'folders', 'items', 'data']
 
   for (const key of candidateKeys) {
     const value = (payload as Record<string, unknown>)[key]
     if (Array.isArray(value)) {
-      return value.filter((item): item is string => typeof item === 'string').sort()
+      return normalizeArray(value)
+    }
+
+    if (typeof value === 'string') {
+      return value
+        .split(/[\s,]+/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .sort()
     }
   }
 
@@ -135,6 +183,49 @@ function normalizeAssessmentTree(payload: unknown, parentPath = ''): TreeViewDat
   }
 }
 
+function normalizeAnalyzerReports(payload: unknown): AnalyzerReportFile[] {
+  function normalizeEntry(entry: unknown): AnalyzerReportFile | null {
+    if (typeof entry === 'string') {
+      return { name: entry, createdAt: null }
+    }
+
+    if (typeof entry !== 'object' || entry === null) {
+      return null
+    }
+
+    const candidate = entry as Record<string, unknown>
+    if (typeof candidate.name !== 'string') {
+      return null
+    }
+
+    return {
+      name: candidate.name,
+      createdAt: typeof candidate.created_at === 'string'
+        ? candidate.created_at
+        : typeof candidate.created_at_iso === 'string'
+          ? candidate.created_at_iso
+          : null,
+    }
+  }
+
+  const filesSource = (() => {
+    if (Array.isArray(payload)) {
+      return payload
+    }
+
+    if (typeof payload !== 'object' || payload === null) {
+      return []
+    }
+
+    const files = (payload as Record<string, unknown>).files
+    return Array.isArray(files) ? files : []
+  })()
+
+  return filesSource
+    .map((entry) => normalizeEntry(entry))
+    .filter((entry): entry is AnalyzerReportFile => entry !== null)
+}
+
 async function executeRequest(
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
@@ -165,48 +256,6 @@ async function executeRequest(
   return { statusCode: response.status, payload }
 }
 
-function ResponsePanel({ title, response }: { title: string; response: ApiResponseState }) {
-  const variant = useMemo(() => {
-    if (response.statusCode === 409) {
-      return 'warning'
-    }
-    if (response.error) {
-      return 'danger'
-    }
-    if (response.statusCode) {
-      return 'success'
-    }
-    return 'info'
-  }, [response.error, response.statusCode])
-
-  return (
-    <Card isCompact className="pf-v5-c-card">
-      <CardHeader>
-        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
-          <FlexItem>
-            <Title headingLevel="h3">{title}</Title>
-          </FlexItem>
-          <FlexItem>
-            <Badge isRead>{response.statusCode ?? 'n/a'}</Badge>
-          </FlexItem>
-        </Flex>
-      </CardHeader>
-      <CardBody>
-        {response.error ? <Alert variant={variant} isInline title={response.error} /> : null}
-        {!response.error && response.statusCode ? (
-          <Alert variant={variant} isInline title="Request completed successfully." />
-        ) : null}
-        {!response.error && !response.statusCode ? <small>No request executed yet.</small> : null}
-        <CodeBlock className="response-block">
-          <CodeBlockCode>
-            {response.payload ? JSON.stringify(response.payload, null, 2) : '{ }'}
-          </CodeBlockCode>
-        </CodeBlock>
-      </CardBody>
-    </Card>
-  )
-}
-
 function App() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
@@ -218,9 +267,20 @@ function App() {
   const [namespaceFilter, setNamespaceFilter] = useState('')
   const [isLoadingNamespaces, setIsLoadingNamespaces] = useState(false)
   const [loadNamespacesError, setLoadNamespacesError] = useState<string | null>(null)
+  const [availableAnalyzerNamespaces, setAvailableAnalyzerNamespaces] = useState<string[]>([])
+  const [selectedAnalyzerNamespaces, setSelectedAnalyzerNamespaces] = useState<string[]>([])
+  const [analyzerNamespaceFilter, setAnalyzerNamespaceFilter] = useState('')
+  const [isLoadingAnalyzerNamespaces, setIsLoadingAnalyzerNamespaces] = useState(false)
+  const [loadAnalyzerNamespacesError, setLoadAnalyzerNamespacesError] = useState<string | null>(null)
+  const [hasAttemptedAutoLoadAnalyzerNamespaces, setHasAttemptedAutoLoadAnalyzerNamespaces] = useState(false)
   const [mode, setMode] = useState<AnalyzerMode>('local')
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
+  const [isDeleteReportsModalOpen, setIsDeleteReportsModalOpen] = useState(false)
+  const [isAnalyzerReportsModalOpen, setIsAnalyzerReportsModalOpen] = useState(false)
   const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
+  const [analyzerReports, setAnalyzerReports] = useState<AnalyzerReportFile[]>([])
+  const [isLoadingAnalyzerReports, setIsLoadingAnalyzerReports] = useState(false)
+  const [analyzerReportsError, setAnalyzerReportsError] = useState<string | null>(null)
   const [assessmentTree, setAssessmentTree] = useState<TreeViewDataItem[]>([])
   const [isLoadingAssessmentTree, setIsLoadingAssessmentTree] = useState(false)
   const [assessmentTreeError, setAssessmentTreeError] = useState<string | null>(null)
@@ -229,10 +289,15 @@ function App() {
   const [hasCollectionStarted, setHasCollectionStarted] = useState(false)
   const [collectionProgress, setCollectionProgress] = useState(0)
   const [collectionStatusError, setCollectionStatusError] = useState<string | null>(null)
+  const [isAnalyzerStatusPolling, setIsAnalyzerStatusPolling] = useState(false)
+  const [isAnalyzerInProgress, setIsAnalyzerInProgress] = useState(false)
+  const [hasAnalyzerStarted, setHasAnalyzerStarted] = useState(false)
+  const [analyzerProgress, setAnalyzerProgress] = useState(0)
+  const [analyzerStatusError, setAnalyzerStatusError] = useState<string | null>(null)
 
   const [collectResponse, setCollectResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupAssessmentResponse, setCleanupAssessmentResponse] = useState<ApiResponseState>(initialResponseState)
-  const [runResponse, setRunResponse] = useState<ApiResponseState>(initialResponseState)
+  const [, setRunResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupReportsResponse, setCleanupReportsResponse] = useState<ApiResponseState>(initialResponseState)
 
   const mastheadLogo = dashboardLogo
@@ -252,6 +317,18 @@ function App() {
   }, [availableNamespaces, namespaceFilter])
 
   const selectedNamespacesText = useMemo(() => selectedNamespaces.join(' '), [selectedNamespaces])
+  const filteredAnalyzerNamespaces = useMemo(() => {
+    const filterText = analyzerNamespaceFilter.trim().toLowerCase()
+    if (!filterText) {
+      return availableAnalyzerNamespaces
+    }
+    return availableAnalyzerNamespaces.filter((item) => item.toLowerCase().includes(filterText))
+  }, [availableAnalyzerNamespaces, analyzerNamespaceFilter])
+
+  const selectedAnalyzerNamespacesText = useMemo(
+    () => selectedAnalyzerNamespaces.join(' '),
+    [selectedAnalyzerNamespaces],
+  )
 
   async function loadNamespaces() {
     setIsLoadingNamespaces(true)
@@ -281,6 +358,82 @@ function App() {
   useEffect(() => {
     void loadNamespaces()
   }, [])
+
+  async function loadAnalyzerNamespaces() {
+    setIsLoadingAnalyzerNamespaces(true)
+    setLoadAnalyzerNamespacesError(null)
+
+    try {
+      const result = await executeRequest('GET', ANALYZER_ASSESSMENT_NAMESPACES_PATH)
+      const parsedNamespaces = normalizeNamespacesResponse(result.payload)
+
+      setAvailableAnalyzerNamespaces(parsedNamespaces)
+      setSelectedAnalyzerNamespaces((previousSelection) => {
+        return previousSelection.filter((item) => parsedNamespaces.includes(item))
+      })
+    } catch (error) {
+      setLoadAnalyzerNamespacesError(error instanceof Error ? error.message : 'Could not load namespaces.')
+      setAvailableAnalyzerNamespaces([])
+      setSelectedAnalyzerNamespaces([])
+    } finally {
+      setIsLoadingAnalyzerNamespaces(false)
+    }
+  }
+
+  async function loadAnalyzerReports() {
+    setIsLoadingAnalyzerReports(true)
+    setAnalyzerReportsError(null)
+
+    try {
+      const result = await executeRequest('GET', ANALYZER_REPORT_FILES_PATH)
+      const parsedReports = normalizeAnalyzerReports(result.payload)
+      setAnalyzerReports(parsedReports)
+    } catch (error) {
+      setAnalyzerReportsError(error instanceof Error ? error.message : 'Could not load report files.')
+      setAnalyzerReports([])
+    } finally {
+      setIsLoadingAnalyzerReports(false)
+    }
+  }
+
+  useEffect(() => {
+    if (
+      activeMenu === 'analyzer'
+      && availableAnalyzerNamespaces.length === 0
+      && !isLoadingAnalyzerNamespaces
+      && !hasAttemptedAutoLoadAnalyzerNamespaces
+    ) {
+      setHasAttemptedAutoLoadAnalyzerNamespaces(true)
+      void loadAnalyzerNamespaces()
+    }
+  }, [
+    activeMenu,
+    availableAnalyzerNamespaces.length,
+    isLoadingAnalyzerNamespaces,
+    hasAttemptedAutoLoadAnalyzerNamespaces,
+  ])
+
+  useEffect(() => {
+    if (activeMenu === 'harvester') {
+      setIsDeleteReportsModalOpen(false)
+      setIsAnalyzerReportsModalOpen(false)
+      void loadNamespaces()
+      return
+    }
+
+    setIsDeleteAssessmentModalOpen(false)
+    setIsAssessmentFilesModalOpen(false)
+    void loadAnalyzerNamespaces()
+    void loadAnalyzerReports()
+  }, [activeMenu])
+
+  useEffect(() => {
+    if (!isAnalyzerReportsModalOpen) {
+      return
+    }
+
+    void loadAnalyzerReports()
+  }, [isAnalyzerReportsModalOpen])
 
   useEffect(() => {
     if (!isCollectionStatusPolling) {
@@ -376,6 +529,56 @@ function App() {
     }
   }, [isAssessmentFilesModalOpen])
 
+  useEffect(() => {
+    if (!isAnalyzerStatusPolling) {
+      return
+    }
+
+    let isActive = true
+    let pollingTimeout: number | undefined
+
+    async function pollAnalyzerStatus() {
+      try {
+        const result = await executeRequest('GET', ANALYZER_STATUS_PATH)
+        const progress = normalizeCollectionProgress(result.payload)
+
+        if (!isActive) {
+          return
+        }
+
+        setAnalyzerProgress(progress)
+        setAnalyzerStatusError(null)
+
+        if (progress >= 100) {
+          setIsAnalyzerStatusPolling(false)
+          setIsAnalyzerInProgress(false)
+          setRunResponse((previousState) => ({ ...previousState, pending: false }))
+          void loadAnalyzerReports()
+          return
+        }
+      } catch (error) {
+        if (!isActive) {
+          return
+        }
+
+        setAnalyzerStatusError(
+          error instanceof Error ? error.message : 'Could not retrieve analyzer status.',
+        )
+      }
+
+      pollingTimeout = window.setTimeout(pollAnalyzerStatus, 2000)
+    }
+
+    void pollAnalyzerStatus()
+
+    return () => {
+      isActive = false
+      if (pollingTimeout !== undefined) {
+        window.clearTimeout(pollingTimeout)
+      }
+    }
+  }, [isAnalyzerStatusPolling])
+
   function toggleNamespace(namespace: string, checked: boolean) {
     setSelectedNamespaces((previousSelection) => {
       if (checked) {
@@ -398,6 +601,30 @@ function App() {
 
   function clearAllNamespaces() {
     setSelectedNamespaces([])
+  }
+
+  function toggleAnalyzerNamespace(namespace: string, checked: boolean) {
+    setSelectedAnalyzerNamespaces((previousSelection) => {
+      if (checked) {
+        if (previousSelection.includes(namespace)) {
+          return previousSelection
+        }
+        return [...previousSelection, namespace]
+      }
+
+      return previousSelection.filter((item) => item !== namespace)
+    })
+  }
+
+  function selectFilteredAnalyzerNamespaces() {
+    setSelectedAnalyzerNamespaces((previousSelection) => {
+      const merged = new Set([...previousSelection, ...filteredAnalyzerNamespaces])
+      return Array.from(merged)
+    })
+  }
+
+  function clearAllAnalyzerNamespaces() {
+    setSelectedAnalyzerNamespaces([])
   }
 
   async function handleCollect(event: FormEvent) {
@@ -477,6 +704,11 @@ function App() {
   async function handleRunAnalyzer(event: FormEvent) {
     event.preventDefault()
 
+    setAnalyzerProgress(0)
+    setAnalyzerStatusError(null)
+    setIsAnalyzerStatusPolling(false)
+    setIsAnalyzerInProgress(true)
+    setHasAnalyzerStarted(true)
     setRunResponse((previousState) => ({
       ...previousState,
       pending: true,
@@ -486,16 +718,29 @@ function App() {
     try {
       const result = await executeRequest('POST', ANALYZER_RUN_PATH, {
         mode,
-        namespaces: selectedNamespacesText,
-        selected_namespaces: selectedNamespaces,
+        namespaces: selectedAnalyzerNamespaces,
       })
       setRunResponse({
-        pending: false,
+        pending: true,
         statusCode: result.statusCode,
         payload: result.payload,
         error: null,
       })
+      setIsAnalyzerStatusPolling(true)
     } catch (error) {
+      if (error instanceof ApiRequestError && error.statusCode === 409) {
+        setRunResponse({
+          pending: true,
+          statusCode: error.statusCode,
+          payload: error.payload,
+          error: null,
+        })
+        setIsAnalyzerStatusPolling(true)
+        return
+      }
+
+      setHasAnalyzerStarted(false)
+      setIsAnalyzerInProgress(false)
       setRunResponse({
         pending: false,
         statusCode: null,
@@ -506,6 +751,7 @@ function App() {
   }
 
   async function handleCleanupReports() {
+    setIsDeleteReportsModalOpen(false)
     setCleanupReportsResponse((previousState) => ({
       ...previousState,
       pending: true,
@@ -520,6 +766,7 @@ function App() {
         payload: result.payload,
         error: null,
       })
+      void loadAnalyzerReports()
     } catch (error) {
       setCleanupReportsResponse({
         pending: false,
@@ -564,14 +811,19 @@ function App() {
               </FlexItem>
             </Flex>
           </MastheadBrand>
-          <MastheadContent className="masthead-tools">
-            <Switch
-              id="color-scheme-switch"
-              label={colorScheme === 'dark' ? 'Dark' : 'Light'}
-              isChecked={colorScheme === 'dark'}
-              isDisabled={isCollectionInProgress}
-              onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'light')}
-            />
+          <MastheadContent className="masthead-content">
+            <span className="app-description">
+              Intelligence to Optimize OpenShift and Kubernetes Environments.
+            </span>
+            <div className="masthead-tools">
+              <Switch
+                id="color-scheme-switch"
+                label={colorScheme === 'dark' ? 'Dark' : 'Light'}
+                isChecked={colorScheme === 'dark'}
+                isDisabled={isCollectionInProgress}
+                onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'light')}
+              />
+            </div>
           </MastheadContent>
         </Masthead>
       }
@@ -710,13 +962,13 @@ function App() {
             isOpen={isDeleteAssessmentModalOpen}
             onClose={() => setIsDeleteAssessmentModalOpen(false)}
           >
-            <ModalHeader title="Delete all assessments?" labelId="delete-assessments-modal-title" />
+            <ModalHeader title="Do you want to perform this action?" labelId="delete-assessments-modal-title" />
             <ModalBody id="delete-assessments-modal-description">
-              This permanently deletes all collected assessment data. This action cannot be undone.
+              This action will remove all assessment data.
             </ModalBody>
             <ModalFooter>
-              <Button variant="danger" onClick={handleCleanupAssessment}>
-                Delete all assessments
+              <Button variant="danger" onClick={handleCleanupAssessment} isLoading={cleanupAssessmentResponse.pending}>
+                Yes, run
               </Button>
               <Button variant="link" onClick={() => setIsDeleteAssessmentModalOpen(false)}>
                 Cancel
@@ -739,9 +991,7 @@ function App() {
                 </div>
               ) : null}
               {assessmentTreeError ? (
-                <Alert isInline variant="warning" title="Could not update the file list">
-                  {assessmentTreeError}
-                </Alert>
+                <p className="modal-feedback-message is-warning">Could not update the file list: {assessmentTreeError}</p>
               ) : null}
               {assessmentTree.length > 0 ? (
                 <div className="assessment-tree-container">
@@ -763,19 +1013,95 @@ function App() {
             <Card className="pf-v5-c-card">
               <CardHeader>
                 <div className="collection-card-heading">
-                  <Title headingLevel="h2" size="xl">Collector and anonymization operations</Title>
-                  <Title headingLevel="h3">
-                    <ChartLineIcon /> Run analyzer
-                  </Title>
+                  <Title headingLevel="h2" size="xl">KubeOptix Analizer</Title>
+                  <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} className="collection-card-header">
+                    <FlexItem>
+                      <Title headingLevel="h3">
+                        <ChartLineIcon /> Run analyzer
+                      </Title>
+                    </FlexItem>
+                    <FlexItem>
+                      <Button
+                        variant="secondary"
+                        icon={<FolderOpenIcon />}
+                        onClick={() => setIsAnalyzerReportsModalOpen(true)}
+                        isDisabled={isAnalyzerInProgress}
+                      >
+                        View reports
+                      </Button>
+                    </FlexItem>
+                  </Flex>
                 </div>
               </CardHeader>
               <CardBody>
                 <Form onSubmit={handleRunAnalyzer}>
-                  <FormGroup label="Selected namespaces" fieldId="analyzer-namespaces">
+                  <FormGroup label="Namespaces" fieldId="analyzer-namespaces-selector">
+                    <Flex gap={{ default: 'gapSm' }}>
+                      <FlexItem>
+                        <TextInput
+                          value={analyzerNamespaceFilter}
+                          id="analyzer-namespace-filter"
+                          onChange={(_event, value) => setAnalyzerNamespaceFilter(value)}
+                          aria-label="Filter analyzer namespaces"
+                          placeholder="Filter namespaces"
+                          isDisabled={isAnalyzerInProgress}
+                        />
+                      </FlexItem>
+                      <FlexItem>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={selectFilteredAnalyzerNamespaces}
+                          isDisabled={isAnalyzerInProgress || filteredAnalyzerNamespaces.length === 0}
+                        >
+                          Select filtered
+                        </Button>
+                      </FlexItem>
+                      <FlexItem>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={clearAllAnalyzerNamespaces}
+                          isDisabled={isAnalyzerInProgress || selectedAnalyzerNamespaces.length === 0}
+                        >
+                          Clear all
+                        </Button>
+                      </FlexItem>
+                      <FlexItem>
+                        <Button
+                          type="button"
+                          variant="link"
+                          onClick={loadAnalyzerNamespaces}
+                          isDisabled={isAnalyzerInProgress || isLoadingAnalyzerNamespaces}
+                        >
+                          {isLoadingAnalyzerNamespaces ? 'Refreshing...' : 'Refresh'}
+                        </Button>
+                      </FlexItem>
+                    </Flex>
+                    {loadAnalyzerNamespacesError ? (
+                      <Alert isInline variant="danger" title={loadAnalyzerNamespacesError} />
+                    ) : null}
+                    <div className="namespace-selector-list" id="analyzer-namespaces-selector">
+                      {isLoadingAnalyzerNamespaces ? <Spinner size="md" /> : null}
+                      {!isLoadingAnalyzerNamespaces && filteredAnalyzerNamespaces.length === 0 ? (
+                        <small>No namespaces found.</small>
+                      ) : null}
+                      {!isLoadingAnalyzerNamespaces
+                        ? filteredAnalyzerNamespaces.map((namespace) => (
+                            <Checkbox
+                              key={namespace}
+                              id={`analyzer-namespace-${namespace}`}
+                              label={namespace}
+                              isChecked={selectedAnalyzerNamespaces.includes(namespace)}
+                              isDisabled={isAnalyzerInProgress}
+                              onChange={(_event, checked) => toggleAnalyzerNamespace(namespace, checked)}
+                            />
+                          ))
+                        : null}
+                    </div>
                     <small id="analyzer-namespaces">
-                      {selectedNamespaces.length > 0
-                        ? `${selectedNamespaces.length} selected: ${selectedNamespacesText}`
-                        : 'No namespaces selected. Go to Harvester and choose at least one namespace.'}
+                      Selected: {selectedAnalyzerNamespaces.length}
+                      {selectedAnalyzerNamespaces.length > 0 ? ` (${selectedAnalyzerNamespacesText})` : ''}
                     </small>
                   </FormGroup>
                   <FormGroup label="Mode" fieldId="run-mode">
@@ -798,47 +1124,118 @@ function App() {
                           onChange={() => setMode('llm')}
                         />
                       </FlexItem>
-                      <FlexItem>
-                        <Radio
-                          id="mode-embedded"
-                          name="mode"
-                          label="embedded"
-                          isChecked={mode === 'embedded'}
-                          onChange={() => setMode('embedded')}
-                        />
-                      </FlexItem>
                     </Flex>
-                    <p>Recommended for OpenShift: local</p>
                   </FormGroup>
-                  <Button type="submit" isDisabled={runResponse.pending || selectedNamespaces.length === 0}>
-                    {runResponse.pending ? <Spinner size="md" /> : 'POST /run'}
-                  </Button>
+                  <div className="collect-run-actions">
+                    <Button
+                      type="button"
+                      variant="danger"
+                      icon={<TrashIcon />}
+                      onClick={() => setIsDeleteReportsModalOpen(true)}
+                      isDisabled={isAnalyzerInProgress || cleanupReportsResponse.pending}
+                    >
+                      {cleanupReportsResponse.pending ? <Spinner size="md" /> : 'DELETE ALL'}
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="collect-run-button"
+                      isDisabled={isAnalyzerInProgress || selectedAnalyzerNamespaces.length === 0}
+                    >
+                      {isAnalyzerInProgress ? <Spinner size="md" /> : 'Run'}
+                    </Button>
+                  </div>
+                  {hasAnalyzerStarted ? (
+                    <div className="collection-progress" aria-live="polite">
+                      <Progress
+                        value={analyzerProgress}
+                        title="Analyzer progress"
+                        measureLocation="inside"
+                      />
+                      <p className="collection-progress-message">
+                        {isAnalyzerInProgress
+                          ? 'Analyzing data. Status updates every 2 seconds.'
+                          : 'Analysis completed.'}
+                      </p>
+                      {analyzerStatusError ? (
+                        <Alert
+                          isInline
+                          variant="warning"
+                          title="Could not update analyzer status. Retrying in 2 seconds."
+                        >
+                          {analyzerStatusError}
+                        </Alert>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </Form>
               </CardBody>
             </Card>
           </PageSection>
 
-          <PageSection>
-            <Card className="pf-v5-c-card">
-              <CardHeader>
-                <Title headingLevel="h3">
-                  <TrashIcon /> Clear reports directory
-                </Title>
-              </CardHeader>
-              <CardBody>
-                <Button variant="danger" onClick={handleCleanupReports} isDisabled={cleanupReportsResponse.pending}>
-                  {cleanupReportsResponse.pending ? <Spinner size="md" /> : 'DELETE /reports'}
-                </Button>
-              </CardBody>
-            </Card>
-          </PageSection>
+          <Modal
+            variant={ModalVariant.small}
+            isOpen={isDeleteReportsModalOpen}
+            onClose={() => setIsDeleteReportsModalOpen(false)}
+          >
+            <ModalHeader title="Do you want to perform this action?" labelId="delete-reports-modal-title" />
+            <ModalBody id="delete-reports-modal-description">
+              This action will remove all analyzer reports.
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="danger" onClick={handleCleanupReports} isLoading={cleanupReportsResponse.pending}>
+                Yes, run
+              </Button>
+              <Button variant="link" onClick={() => setIsDeleteReportsModalOpen(false)}>
+                Cancel
+              </Button>
+            </ModalFooter>
+          </Modal>
 
-          <PageSection>
-            <ResponsePanel title="Run response" response={runResponse} />
-          </PageSection>
-          <PageSection>
-            <ResponsePanel title="Reports cleanup response" response={cleanupReportsResponse} />
-          </PageSection>
+          <Modal
+            className="assessment-files-modal-box"
+            backdropClassName="assessment-files-modal-backdrop"
+            width="min(42rem, 92vw)"
+            isOpen={isAnalyzerReportsModalOpen}
+            onClose={() => setIsAnalyzerReportsModalOpen(false)}
+          >
+            <ModalHeader title="Analyzer reports" labelId="analyzer-reports-modal-title" />
+            <ModalBody id="analyzer-reports-modal-description">
+              {isLoadingAnalyzerReports ? (
+                <div className="assessment-tree-loading">
+                  <Spinner size="lg" aria-label="Loading analyzer reports" />
+                </div>
+              ) : null}
+              {analyzerReportsError ? (
+                <p className="modal-feedback-message is-warning">Could not update report files: {analyzerReportsError}</p>
+              ) : null}
+              {!isLoadingAnalyzerReports && !analyzerReportsError && analyzerReports.length === 0 ? (
+                <small>No reports found.</small>
+              ) : null}
+              {!isLoadingAnalyzerReports && analyzerReports.length > 0 ? (
+                <div className="assessment-tree-container">
+                  {analyzerReports.map((report) => (
+                    <div key={report.name} className="report-file-row">
+                      <strong>{report.name}</strong>
+                      {report.createdAt ? <small>{report.createdAt}</small> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={loadAnalyzerReports}
+                isDisabled={isLoadingAnalyzerReports || isAnalyzerInProgress}
+              >
+                {isLoadingAnalyzerReports ? 'Refreshing...' : 'Refresh'}
+              </Button>
+              <Button variant="link" onClick={() => setIsAnalyzerReportsModalOpen(false)}>
+                Close
+              </Button>
+            </ModalFooter>
+          </Modal>
         </>
       )}
     </Page>

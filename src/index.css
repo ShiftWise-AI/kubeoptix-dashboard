@@ -36,12 +36,6 @@ body {
   }
 }
 
-.response-block {
-  margin-top: 1rem;
-  max-height: 24rem;
-  overflow: auto;
-}
-
 .namespace-selector-list {
   margin-top: 0.75rem;
   margin-bottom: 0.5rem;
@@ -70,11 +64,33 @@ body {
   background: transparent;
 }
 
-.masthead-tools {
+.app-description {
+  padding-inline-start: 0.75rem;
+  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.masthead-content {
+  min-width: 0;
   width: 100%;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.masthead-tools {
+  width: max-content;
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  justify-self: end;
+  margin-inline-start: auto;
 }
 
 .collect-run-actions {
@@ -138,6 +154,44 @@ body {
 .assessment-tree-container {
   min-height: 12rem;
   overflow: auto;
+}
+
+.report-file-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--pf-t--global--border--color--subtle);
+}
+
+.report-file-row:last-child {
+  border-bottom: 0;
+}
+
+.modal-feedback-message {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
+
+.modal-feedback-message.is-success {
+  color: #2a5a1f;
+  background: #edf8e9;
+  border-color: #9bd18a;
+}
+
+.modal-feedback-message.is-danger {
+  color: #7a1d1d;
+  background: #fdeeee;
+  border-color: #e8a6a6;
+}
+
+.modal-feedback-message.is-warning {
+  color: #5a4300;
+  background: #fff5db;
+  border-color: #f2cf74;
 }
 
 

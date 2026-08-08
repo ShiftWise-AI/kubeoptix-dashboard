@@ -25,29 +25,34 @@ npm install
 npm run dev
 ```
 
-The Vite dev server proxies Harvester API calls to the URL configured in
-`HARVESTER_API_URL`. The default is the OpenShift service address:
+When running `npm run dev`, Vite loads `.env.development`. The browser uses
+clean local paths such as `/namespaces`, `/collect`, and `/run`, and the Vite
+development proxy forwards them to the OCP routes. This avoids browser CORS
+restrictions without using the dashboard `/api/harvester` or `/api/analyzer`
+prefixes. The development targets are:
 
-- `http://harvester:8000`
+- `HARVESTER_API_URL=https://harvester-shiftwise-ai.apps-crc.testing`
+- `ANALYZER_API_URL=https://analyzer-shiftwise-ai.apps-crc.testing`
 
-Proxy paths used by the frontend:
+Proxy paths used by the frontend outside development:
 
 - `/api/harvester/*`
 - `/api/analyzer/*`
 
 ## Environment overrides
 
-Copy the environment template before running locally:
+Copy the environment template to configure the production server locally:
 
 ```bash
 cp .env.example .env
 ```
 
-Set `HARVESTER_API_URL` to an address reachable from the dashboard process.
+Set both API URLs to addresses reachable from the dashboard process.
 For example:
 
 ```env
 HARVESTER_API_URL=https://harvester.example.com
+ANALYZER_API_URL=https://analyzer.example.com
 ```
 
 ## OpenShift deployment
@@ -75,7 +80,7 @@ Analyzer runtime configuration will be added separately.
 The chart in `helm/kubeoptix-dashboard` creates:
 
 - an `ImageStream` and a `BuildConfig` sourced from the `main` branch;
-- a `ConfigMap` generated from `helm/kubeoptix-dashboard/files/.env`;
+- a `ConfigMap` generated from the root `.env.openshift` file;
 - a single-replica `StatefulSet`;
 - a `Service` and an edge-terminated HTTPS `Route` with HTTP redirect;
 - a `ValidatingAdmissionPolicy` that rejects scaling away from one replica.

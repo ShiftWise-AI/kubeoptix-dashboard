@@ -16,6 +16,7 @@ printf 'Instalando %s no namespace %s...\n' "${RELEASE_NAME}" "${NAMESPACE}"
 helm upgrade --install "${RELEASE_NAME}" "${CHART_DIR}" \
   --namespace "${NAMESPACE}" \
   --create-namespace \
+  --set-file environmentFile="${SCRIPT_DIR}/.env.openshift" \
   --set buildOnly=true
 
 printf 'Iniciando o build da imagem...\n'
@@ -33,6 +34,7 @@ oc get "imagestreamtag/${RELEASE_NAME}:latest" \
 printf 'Criando os demais recursos...\n'
 helm upgrade "${RELEASE_NAME}" "${CHART_DIR}" \
   --namespace "${NAMESPACE}" \
+  --set-file environmentFile="${SCRIPT_DIR}/.env.openshift" \
   --set buildOnly=false
 
 printf 'Instalacao concluida.\n'
