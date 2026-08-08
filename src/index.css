@@ -24,6 +24,18 @@ body {
   background: transparent;
 }
 
+@media (min-width: 62rem) {
+  .dashboard-page {
+    --pf-v6-c-page__sidebar--MarginInlineEnd: 0;
+    --pf-v6-c-page__main-section--PaddingInlineStart: 0;
+  }
+
+  .dashboard-page .pf-v6-c-page__sidebar:not(.pf-m-collapsed) + .pf-v6-c-page__main-container {
+    --pf-v6-c-page__main-container--MarginInlineStart: 1.5rem;
+    --pf-v6-c-page__main-container--MarginBlockStart: 1rem;
+  }
+}
+
 .response-block {
   margin-top: 1rem;
   max-height: 24rem;
@@ -84,6 +96,48 @@ body {
 
 .collection-progress {
   margin-top: 1rem;
+}
+
+.collection-card-header {
+  width: 100%;
+}
+
+.collection-card-heading {
+  width: 100%;
+  display: grid;
+  gap: 1rem;
+}
+
+.assessment-files-modal-backdrop {
+  justify-content: flex-start;
+  padding-inline-start: calc(var(--pf-v6-c-page__sidebar--Width, 18.125rem) + 1.5rem);
+}
+
+.assessment-files-modal-box {
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+}
+
+@media (max-width: 768px) {
+  .assessment-files-modal-backdrop {
+    padding-inline-start: 0;
+  }
+
+  .assessment-files-modal-box {
+    width: 100% !important;
+  }
+}
+
+.assessment-tree-loading {
+  min-height: 12rem;
+  display: grid;
+  place-items: center;
+}
+
+.assessment-tree-container {
+  min-height: 12rem;
+  overflow: auto;
 }
 
 

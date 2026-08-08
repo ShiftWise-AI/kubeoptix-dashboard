@@ -33,9 +33,11 @@ import {
   Spinner,
   Switch,
   TextInput,
+  TreeView,
   Title,
 } from '@patternfly/react-core'
-import { ChartLineIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
+import type { TreeViewDataItem } from '@patternfly/react-core'
+import { ChartLineIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
 import dashboardLogo from '../image/logo.png'
 
 type MenuKey = 'harvester' | 'analyzer'
@@ -64,6 +66,7 @@ class ApiRequestError extends Error {
 const HARVESTER_COLLECT_PATH = '/api/harvester/collect'
 const HARVESTER_COLLECT_STATUS_PATH = '/api/harvester/collect/status'
 const HARVESTER_CLEANUP_PATH = '/api/harvester/assessment'
+const HARVESTER_ASSESSMENT_PATH = '/api/harvester/assessment'
 const HARVESTER_NAMESPACES_PATH = '/api/harvester/namespaces'
 const ANALYZER_RUN_PATH = '/api/analyzer/run'
 const ANALYZER_CLEANUP_PATH = '/api/analyzer/reports'
@@ -104,6 +107,32 @@ function normalizeCollectionProgress(payload: unknown): number {
   }
 
   return Math.min(100, Math.max(0, rawProgress))
+}
+
+function normalizeAssessmentTree(payload: unknown, parentPath = ''): TreeViewDataItem {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new Error('The assessment API returned an invalid file tree.')
+  }
+
+  const node = payload as Record<string, unknown>
+  if (typeof node.name !== 'string' || (node.type !== 'directory' && node.type !== 'file')) {
+    throw new Error('The assessment API returned an invalid file tree node.')
+  }
+
+  const path = `${parentPath}/${node.name}`
+  const isDirectory = node.type === 'directory'
+  const children = Array.isArray(node.children)
+    ? node.children.map((child) => normalizeAssessmentTree(child, path))
+    : []
+
+  return {
+    id: path,
+    name: node.name,
+    icon: isDirectory ? <FolderIcon /> : <FileAltIcon />,
+    expandedIcon: isDirectory ? <FolderOpenIcon /> : undefined,
+    children: isDirectory ? children : undefined,
+    defaultExpanded: parentPath === '',
+  }
 }
 
 async function executeRequest(
@@ -181,7 +210,7 @@ function ResponsePanel({ title, response }: { title: string; response: ApiRespon
 function App() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
-    return savedValue === 'dark' ? 'dark' : 'light'
+    return savedValue === 'light' ? 'light' : 'dark'
   })
   const [activeMenu, setActiveMenu] = useState<MenuKey>('harvester')
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([])
@@ -191,6 +220,10 @@ function App() {
   const [loadNamespacesError, setLoadNamespacesError] = useState<string | null>(null)
   const [mode, setMode] = useState<AnalyzerMode>('local')
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
+  const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
+  const [assessmentTree, setAssessmentTree] = useState<TreeViewDataItem[]>([])
+  const [isLoadingAssessmentTree, setIsLoadingAssessmentTree] = useState(false)
+  const [assessmentTreeError, setAssessmentTreeError] = useState<string | null>(null)
   const [isCollectionInProgress, setIsCollectionInProgress] = useState(false)
   const [isCollectionStatusPolling, setIsCollectionStatusPolling] = useState(false)
   const [hasCollectionStarted, setHasCollectionStarted] = useState(false)
@@ -297,6 +330,51 @@ function App() {
       }
     }
   }, [isCollectionStatusPolling])
+
+  useEffect(() => {
+    if (!isAssessmentFilesModalOpen) {
+      return
+    }
+
+    let isActive = true
+    let pollingTimeout: number | undefined
+
+    async function pollAssessmentTree() {
+      if (assessmentTree.length === 0) {
+        setIsLoadingAssessmentTree(true)
+      }
+
+      try {
+        const result = await executeRequest('GET', HARVESTER_ASSESSMENT_PATH)
+        const tree = [normalizeAssessmentTree(result.payload)]
+
+        if (isActive) {
+          setAssessmentTree(tree)
+          setAssessmentTreeError(null)
+        }
+      } catch (error) {
+        if (isActive) {
+          setAssessmentTreeError(
+            error instanceof Error ? error.message : 'Could not load assessment files.',
+          )
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingAssessmentTree(false)
+          pollingTimeout = window.setTimeout(pollAssessmentTree, 3000)
+        }
+      }
+    }
+
+    void pollAssessmentTree()
+
+    return () => {
+      isActive = false
+      if (pollingTimeout !== undefined) {
+        window.clearTimeout(pollingTimeout)
+      }
+    }
+  }, [isAssessmentFilesModalOpen])
 
   function toggleNamespace(namespace: string, checked: boolean) {
     setSelectedNamespaces((previousSelection) => {
@@ -469,6 +547,7 @@ function App() {
 
   return (
     <Page
+      className="dashboard-page"
       masthead={
         <Masthead className="pf-v5-c-masthead">
           <MastheadBrand>
@@ -499,20 +578,30 @@ function App() {
       sidebar={sidebar}
       isManagedSidebar
     >
-      <PageSection>
-        <Title headingLevel="h2" size="xl">
-          {activeMenu === 'harvester' ? 'KubeOptix Harvester' : 'Collector and anonymization operations'}
-        </Title>
-      </PageSection>
-
       {activeMenu === 'harvester' ? (
         <>
           <PageSection>
             <Card className="pf-v5-c-card">
               <CardHeader>
-                <Title headingLevel="h3">
-                  <PlayIcon /> Start collection
-                </Title>
+                <div className="collection-card-heading">
+                  <Title headingLevel="h2" size="xl">KubeOptix Harvester</Title>
+                  <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} className="collection-card-header">
+                    <FlexItem>
+                      <Title headingLevel="h3">
+                        <PlayIcon /> Start collection
+                      </Title>
+                    </FlexItem>
+                    <FlexItem>
+                      <Button
+                        variant="secondary"
+                        icon={<FolderOpenIcon />}
+                        onClick={() => setIsAssessmentFilesModalOpen(true)}
+                      >
+                        View files
+                      </Button>
+                    </FlexItem>
+                  </Flex>
+                </div>
               </CardHeader>
               <CardBody>
                 <Form onSubmit={handleCollect}>
@@ -635,15 +724,50 @@ function App() {
             </ModalFooter>
           </Modal>
 
+          <Modal
+            className="assessment-files-modal-box"
+            backdropClassName="assessment-files-modal-backdrop"
+            width="min(42rem, 92vw)"
+            isOpen={isAssessmentFilesModalOpen}
+            onClose={() => setIsAssessmentFilesModalOpen(false)}
+          >
+            <ModalHeader title="Assessment files" labelId="assessment-files-modal-title" />
+            <ModalBody id="assessment-files-modal-description">
+              {isLoadingAssessmentTree && assessmentTree.length === 0 ? (
+                <div className="assessment-tree-loading">
+                  <Spinner size="lg" aria-label="Loading assessment files" />
+                </div>
+              ) : null}
+              {assessmentTreeError ? (
+                <Alert isInline variant="warning" title="Could not update the file list">
+                  {assessmentTreeError}
+                </Alert>
+              ) : null}
+              {assessmentTree.length > 0 ? (
+                <div className="assessment-tree-container">
+                  <TreeView
+                    aria-label="Assessment file hierarchy"
+                    data={assessmentTree}
+                    hasGuides
+                    hasAnimations
+                  />
+                </div>
+              ) : null}
+            </ModalBody>
+          </Modal>
+
         </>
       ) : (
         <>
           <PageSection>
             <Card className="pf-v5-c-card">
               <CardHeader>
-                <Title headingLevel="h3">
-                  <ChartLineIcon /> Run analyzer
-                </Title>
+                <div className="collection-card-heading">
+                  <Title headingLevel="h2" size="xl">Collector and anonymization operations</Title>
+                  <Title headingLevel="h3">
+                    <ChartLineIcon /> Run analyzer
+                  </Title>
+                </div>
               </CardHeader>
               <CardBody>
                 <Form onSubmit={handleRunAnalyzer}>
