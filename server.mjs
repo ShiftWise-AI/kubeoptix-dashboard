@@ -29,6 +29,10 @@ async function proxyApi(request, response, prefix, apiUrl) {
   const upstreamPath = requestUrl.pathname.slice(prefix.length) || '/'
   const upstreamUrl = new URL(`${upstreamPath}${requestUrl.search}`, apiUrl)
   const headers = { ...request.headers }
+  const hasRequestBody = request.method !== 'GET' && request.method !== 'HEAD'
+  const requestBody = hasRequestBody
+    ? Buffer.concat(await Array.fromAsync(request, (chunk) => Buffer.from(chunk)))
+    : undefined
 
   delete headers.host
   delete headers.connection
@@ -38,8 +42,7 @@ async function proxyApi(request, response, prefix, apiUrl) {
     const upstreamResponse = await fetch(upstreamUrl, {
       method: request.method,
       headers,
-      body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request,
-      duplex: 'half',
+      body: requestBody,
     })
 
     const responseHeaders = Object.fromEntries(upstreamResponse.headers.entries())
