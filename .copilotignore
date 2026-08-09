@@ -1,0 +1,29 @@
+# Node.js e Dependências
+node_modules/
+.npm/
+.eslintcache
+
+# Builds de Frontend (React / TS / JS)
+dist/
+build/
+.next/
+out/
+
+# Arquivos de Infraestrutura Gerados e Binários
+.helm/
+*.tgz
+charts/site/charts/
+.deploy/
+kubeconfig*
+
+# Logs de Containers, Podman e Kubernetes
+*.log
+logs/
+.podman/
+.kube/
+
+# Segredos e Variáveis de Ambiente (Segurança de Contexto)
+.env
+.env.*
+*.pem
+*.key
