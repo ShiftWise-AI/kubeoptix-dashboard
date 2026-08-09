@@ -507,6 +507,8 @@ function App() {
           setAssessmentTreeError(null)
         }
       } catch (error) {
+        console.error('Error loading assessment tree:', error)
+        
         if (isActive) {
           setAssessmentTreeError(
             error instanceof Error ? error.message : 'Could not load assessment files.',
