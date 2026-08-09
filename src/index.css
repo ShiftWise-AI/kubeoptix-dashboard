@@ -223,9 +223,14 @@ body {
 }
 
 .markdown-viewer {
+  width: min(100%, 68rem);
   min-height: 30rem;
+  margin-inline: auto;
+  padding: 0.5rem clamp(0rem, 2vw, 1.5rem) 2rem;
   color: var(--pf-t--global--text--color--regular);
-  line-height: 1.6;
+  font-family: var(--pf-t--global--font--family--body);
+  font-size: 1rem;
+  line-height: 1.7;
   overflow-wrap: anywhere;
 }
 
@@ -233,20 +238,118 @@ body {
   margin-top: 0;
 }
 
+.markdown-viewer > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-viewer h1,
+.markdown-viewer h2,
+.markdown-viewer h3,
+.markdown-viewer h4,
+.markdown-viewer h5,
+.markdown-viewer h6 {
+  color: var(--pf-t--global--text--color--regular);
+  font-family: var(--pf-t--global--font--family--heading);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  letter-spacing: 0;
+  line-height: 1.25;
+  scroll-margin-top: 1rem;
+}
+
+.markdown-viewer h1 {
+  margin: 0 0 1.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--pf-t--global--color--brand--default);
+  font-size: 2rem;
+}
+
+.markdown-viewer h2 {
+  margin: 2.5rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  font-size: 1.5rem;
+}
+
+.markdown-viewer h3 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.25rem;
+}
+
+.markdown-viewer h4 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1.075rem;
+}
+
+.markdown-viewer h5,
+.markdown-viewer h6 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.markdown-viewer p,
+.markdown-viewer ul,
+.markdown-viewer ol,
+.markdown-viewer blockquote,
+.markdown-viewer table,
+.markdown-viewer pre {
+  margin-block: 0 1.25rem;
+}
+
+.markdown-viewer ul,
+.markdown-viewer ol {
+  padding-inline-start: 1.5rem;
+}
+
+.markdown-viewer li + li {
+  margin-top: 0.35rem;
+}
+
+.markdown-viewer a {
+  color: var(--pf-t--global--text--color--link--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  text-underline-offset: 0.2em;
+}
+
+.markdown-viewer a:hover {
+  color: var(--pf-t--global--text--color--link--hover);
+}
+
+.markdown-viewer hr {
+  margin: 2.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+}
+
+.markdown-viewer blockquote {
+  padding: 0.75rem 1rem;
+  border-inline-start: 4px solid var(--pf-t--global--color--brand--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.markdown-viewer blockquote > :last-child {
+  margin-bottom: 0;
+}
+
 .markdown-viewer img {
   display: block;
   max-width: 100%;
   height: auto;
-  margin: 1rem auto;
+  margin: 1.5rem auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
 }
 
 .markdown-viewer pre {
   max-width: 100%;
-  padding: 1rem;
+  padding: 1rem 1.125rem;
   overflow: auto;
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: 6px;
   background: var(--pf-t--global--background--color--secondary--default);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
 }
 
 .markdown-viewer pre:has(.markdown-mermaid-diagram) {
@@ -257,27 +360,45 @@ body {
 }
 
 .markdown-viewer :not(pre) > code {
-  padding: 0.125rem 0.25rem;
+  padding: 0.15rem 0.35rem;
   border-radius: 3px;
   background: var(--pf-t--global--background--color--secondary--default);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.875em;
 }
 
 .markdown-viewer table {
+  display: block;
   width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
+  font-size: 0.925rem;
 }
 
 .markdown-viewer th,
 .markdown-viewer td {
-  padding: 0.5rem;
+  padding: 0.625rem 0.75rem;
   border: 1px solid var(--pf-t--global--border--color--default);
   text-align: start;
+  vertical-align: top;
+}
+
+.markdown-viewer th {
+  background: var(--pf-t--global--background--color--secondary--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.markdown-viewer tbody tr:nth-child(even) {
+  background: var(--pf-t--global--background--color--secondary--default);
 }
 
 .markdown-mermaid-diagram {
   width: 100%;
-  margin: 1.5rem 0;
+  margin: 2rem 0;
+  padding: 1rem;
   overflow: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
   text-align: center;
 }
 
@@ -306,6 +427,23 @@ body {
 
   .report-markdown-editor {
     min-height: 24rem;
+  }
+
+  .markdown-viewer {
+    padding-inline: 0;
+    font-size: 0.95rem;
+  }
+
+  .markdown-viewer h1 {
+    font-size: 1.65rem;
+  }
+
+  .markdown-viewer h2 {
+    font-size: 1.35rem;
+  }
+
+  .markdown-viewer h3 {
+    font-size: 1.15rem;
   }
 }
 
