@@ -6,6 +6,9 @@ import { Readable } from 'node:stream'
 const port = 8080
 const harvesterApiUrl = new URL(process.env.HARVESTER_API_URL)
 const analyzerApiUrl = new URL(process.env.ANALYZER_API_URL)
+const reporterApiUrl = new URL(
+  process.env.REPORTER_API_URL ?? 'http://reporter-api:8000',
+)
 const distDirectory = resolve('dist')
 
 const contentTypes = {
@@ -89,6 +92,11 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.url?.startsWith('/api/reporter')) {
+    await proxyApi(request, response, '/api/reporter', reporterApiUrl)
+    return
+  }
+
   if (request.url === '/healthz') {
     sendJson(response, 200, { status: 'ok' })
     return
@@ -101,6 +109,7 @@ server.listen(port, '0.0.0.0', () => {
   console.log(`KubeOptix Dashboard listening on port ${port}`)
   console.log(`Harvester API target: ${harvesterApiUrl.origin}`)
   console.log(`Analyzer API target: ${analyzerApiUrl.origin}`)
+  console.log(`Reporter API target: ${reporterApiUrl.origin}`)
 })
 
 function shutdown(signal) {

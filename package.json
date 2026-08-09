@@ -14,8 +14,11 @@
     "@patternfly/react-core": "^6.6.1",
     "@patternfly/react-icons": "^6.6.1",
     "@patternfly/react-table": "^6.6.1",
+    "mermaid": "^11.16.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

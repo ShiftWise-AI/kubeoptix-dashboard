@@ -156,16 +156,157 @@ body {
   overflow: auto;
 }
 
-.report-file-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid var(--pf-t--global--border--color--subtle);
+.report-files-menu {
+  width: 100%;
+  max-height: 28rem;
+  overflow: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
 }
 
-.report-file-row:last-child {
-  border-bottom: 0;
+.reports-page-heading {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.reports-workspace {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: 1rem;
+  min-height: 32rem;
+}
+
+.reports-list-panel,
+.report-editor-panel {
+  min-width: 0;
+}
+
+.report-editor-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.report-editor-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.report-editor-empty {
+  margin: 0;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.report-editor-loading {
+  min-height: 32rem;
+  display: grid;
+  place-items: center;
+}
+
+.report-markdown-editor {
+  width: 100%;
+  min-height: 32rem;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.report-preview-modal {
+  max-height: 92vh;
+}
+
+.markdown-viewer {
+  min-height: 30rem;
+  color: var(--pf-t--global--text--color--regular);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.markdown-viewer > :first-child {
+  margin-top: 0;
+}
+
+.markdown-viewer img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1rem auto;
+}
+
+.markdown-viewer pre {
+  max-width: 100%;
+  padding: 1rem;
+  overflow: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.markdown-viewer pre:has(.markdown-mermaid-diagram) {
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.markdown-viewer :not(pre) > code {
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.markdown-viewer table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.markdown-viewer th,
+.markdown-viewer td {
+  padding: 0.5rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  text-align: start;
+}
+
+.markdown-mermaid-diagram {
+  width: 100%;
+  margin: 1.5rem 0;
+  overflow: auto;
+  text-align: center;
+}
+
+.markdown-mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-mermaid-loading,
+.markdown-mermaid-error {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
+}
+
+.markdown-mermaid-error {
+  color: var(--pf-t--global--color--status--danger--default);
+}
+
+@media (max-width: 768px) {
+  .reports-workspace {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .report-markdown-editor {
+    min-height: 24rem;
+  }
 }
 
 .modal-feedback-message {

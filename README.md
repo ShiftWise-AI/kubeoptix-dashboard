@@ -34,11 +34,13 @@ targets are:
 
 - `HARVESTER_API_URL=https://harvester-shiftwise-ai.apps-crc.testing`
 - `ANALYZER_API_URL=https://analyzer-shiftwise-ai.apps-crc.testing`
+- `REPORTER_API_URL=https://reporter-shiftwise-ai.apps-crc.testing`
 
 Proxy paths used by the frontend outside development:
 
 - `/api/harvester/*`
 - `/api/analyzer/*`
+- `/api/reporter/*`
 
 ## Environment overrides
 
@@ -54,6 +56,7 @@ For example:
 ```env
 HARVESTER_API_URL=https://harvester.example.com
 ANALYZER_API_URL=https://analyzer.example.com
+REPORTER_API_URL=https://reporter.example.com
 ```
 
 ## OpenShift deployment
@@ -75,6 +78,10 @@ Service in the same namespace. The dashboard exposes `/healthz` for readiness
 and liveness probes.
 
 Analyzer runtime configuration will be added separately.
+
+The Reporter proxy uses `REPORTER_API_URL=http://reporter-api:8000` in
+OpenShift, so report requests stay on the cluster service network instead of
+using the external Route.
 
 ## Helm installation
 
