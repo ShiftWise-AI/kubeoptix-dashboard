@@ -29,3 +29,67 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+
+# ==============================================================================
+# 🤖 OTIMIZAÇÃO DE TOKENS (GITHUB COPILOT)
+# ==============================================================================
+# Bloqueia arquivos gigantescos de mapeamento que esgotam o contexto da IA
+**/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
+**/*.log
+**/npm-debug.log*
+
+# ==============================================================================
+# NODE.JS & BACKEND
+# ==============================================================================
+# Dependências do Node (podem existir na raiz, frontend ou backend)
+**/node_modules/
+node_modules/
+
+# Arquivos de ambiente locais (segurança e economia de tokens)
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+
+# Logs e cobertura de testes do Node/Jest
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+coverage/
+.nyc_output/
+
+# ==============================================================================
+# REACT & FRONTEND (Vite / Next.js / Create React App)
+# ==============================================================================
+# Pastas de build e produção do React
+**/dist/
+**/build/
+**/.next/
+**/out/
+
+# Cache de ferramentas de build e linters
+**/.eslintcache
+**/.stylelintcache
+**/.vite/
+**/.turbo/
+
+# ==============================================================================
+# SISTEMA OPERACIONAL E EDITORES
+# ==============================================================================
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp

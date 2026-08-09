@@ -1,0 +1,28 @@
+# Ignorar dependências e artefatos de build (Essencial para economia de tokens e tempo)
+node_modules
+**/node_modules
+dist
+build
+.next
+out
+
+# Ignorar segredos e configurações locais
+.env*
+.aws
+.npmrc
+.git
+.vscode
+.idea
+
+# Ignorar documentação e testes no container de produção
+README.md
+CONTRIBUTING.md
+docs/
+**/__tests__
+**/*.test.*
+**/*.spec.*
+
+# Logs de erro
+*.log
+npm-debug.log*
+yarn-error.log*

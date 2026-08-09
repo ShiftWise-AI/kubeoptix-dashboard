@@ -508,7 +508,7 @@ function App() {
         }
       } catch (error) {
         console.error('Error loading assessment tree:', error)
-        
+
         if (isActive) {
           setAssessmentTreeError(
             error instanceof Error ? error.message : 'Could not load assessment files.',
@@ -898,15 +898,15 @@ function App() {
                       ) : null}
                       {!isLoadingNamespaces
                         ? filteredNamespaces.map((namespace) => (
-                            <Checkbox
-                              key={namespace}
-                              id={`namespace-${namespace}`}
-                              label={namespace}
-                              isChecked={selectedNamespaces.includes(namespace)}
-                              isDisabled={isCollectionInProgress}
-                              onChange={(_event, checked) => toggleNamespace(namespace, checked)}
-                            />
-                          ))
+                          <Checkbox
+                            key={namespace}
+                            id={`namespace-${namespace}`}
+                            label={namespace}
+                            isChecked={selectedNamespaces.includes(namespace)}
+                            isDisabled={isCollectionInProgress}
+                            onChange={(_event, checked) => toggleNamespace(namespace, checked)}
+                          />
+                        ))
                         : null}
                     </div>
                     <small>
@@ -1091,15 +1091,15 @@ function App() {
                       ) : null}
                       {!isLoadingAnalyzerNamespaces
                         ? filteredAnalyzerNamespaces.map((namespace) => (
-                            <Checkbox
-                              key={namespace}
-                              id={`analyzer-namespace-${namespace}`}
-                              label={namespace}
-                              isChecked={selectedAnalyzerNamespaces.includes(namespace)}
-                              isDisabled={isAnalyzerInProgress}
-                              onChange={(_event, checked) => toggleAnalyzerNamespace(namespace, checked)}
-                            />
-                          ))
+                          <Checkbox
+                            key={namespace}
+                            id={`analyzer-namespace-${namespace}`}
+                            label={namespace}
+                            isChecked={selectedAnalyzerNamespaces.includes(namespace)}
+                            isDisabled={isAnalyzerInProgress}
+                            onChange={(_event, checked) => toggleAnalyzerNamespace(namespace, checked)}
+                          />
+                        ))
                         : null}
                     </div>
                     <small id="analyzer-namespaces">
