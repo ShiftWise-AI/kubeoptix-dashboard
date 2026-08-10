@@ -199,6 +199,27 @@ body {
   gap: 1rem;
 }
 
+.report-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.report-save-status {
+  min-width: 5.5rem;
+  color: var(--pf-t--global--text--color--subtle);
+  text-align: right;
+}
+
+.report-save-status--saved {
+  color: var(--pf-t--global--color--status--success--default);
+}
+
+.report-save-status--error {
+  color: var(--pf-t--global--color--status--danger--default);
+}
+
 .report-editor-empty {
   margin: 0;
   color: var(--pf-t--global--text--color--subtle);

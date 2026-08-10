@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   Alert,
@@ -46,6 +46,7 @@ import dashboardLogo from '../image/logo.png'
 type MenuKey = 'harvester' | 'analyzer' | 'reports'
 type AnalyzerMode = 'local' | 'llm'
 type ColorScheme = 'light' | 'dark'
+type ReportSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
 type ApiResponseState = {
   pending: boolean
@@ -304,6 +305,31 @@ async function fetchReportContent(fileName: string): Promise<string> {
   }
 }
 
+async function saveReportContent(fileName: string, content: string, signal: AbortSignal): Promise<void> {
+  const response = await fetch(getReporterReportPath(fileName), {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/markdown; charset=utf-8' },
+    body: content,
+    signal,
+  })
+
+  if (!response.ok) {
+    const responseText = await response.text()
+    let message = responseText || `Request failed with status ${response.status}`
+
+    try {
+      const payload = JSON.parse(responseText) as unknown
+      if (typeof payload === 'object' && payload !== null && 'error' in payload) {
+        message = String(payload.error)
+      }
+    } catch {
+      // Keep the plain-text response as the error message.
+    }
+
+    throw new ApiRequestError(message, response.status, responseText)
+  }
+}
+
 function App() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
@@ -332,6 +358,10 @@ function App() {
   const [analyzerReportContent, setAnalyzerReportContent] = useState('')
   const [isLoadingAnalyzerReportContent, setIsLoadingAnalyzerReportContent] = useState(false)
   const [analyzerReportContentError, setAnalyzerReportContentError] = useState<string | null>(null)
+  const [reportSaveStatus, setReportSaveStatus] = useState<ReportSaveStatus>('idle')
+  const [reportSaveError, setReportSaveError] = useState<string | null>(null)
+  const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
+  const reportLoadSequence = useRef(0)
   const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
   const [assessmentTree, setAssessmentTree] = useState<TreeViewDataItem[]>([])
   const [isLoadingAssessmentTree, setIsLoadingAssessmentTree] = useState(false)
@@ -449,21 +479,81 @@ function App() {
   }
 
   async function openAnalyzerReport(report: AnalyzerReportFile) {
+    const loadSequence = ++reportLoadSequence.current
     setSelectedAnalyzerReport(report)
     setAnalyzerReportContent('')
     setAnalyzerReportContentError(null)
+    setReportSaveStatus('idle')
+    setReportSaveError(null)
+    lastSavedReport.current = null
     setIsLoadingAnalyzerReportContent(true)
 
     try {
-      setAnalyzerReportContent(await fetchReportContent(report.name))
+      const content = await fetchReportContent(report.name)
+      if (loadSequence !== reportLoadSequence.current) {
+        return
+      }
+      lastSavedReport.current = { fileName: report.name, content }
+      setAnalyzerReportContent(content)
     } catch (error) {
+      if (loadSequence !== reportLoadSequence.current) {
+        return
+      }
       setAnalyzerReportContentError(
         error instanceof Error ? error.message : 'Could not load the report.',
       )
     } finally {
-      setIsLoadingAnalyzerReportContent(false)
+      if (loadSequence === reportLoadSequence.current) {
+        setIsLoadingAnalyzerReportContent(false)
+      }
     }
   }
+
+  useEffect(() => {
+    if (
+      !selectedAnalyzerReport
+      || isLoadingAnalyzerReportContent
+      || analyzerReportContentError
+      || (
+        lastSavedReport.current?.fileName === selectedAnalyzerReport.name
+        && lastSavedReport.current.content === analyzerReportContent
+      )
+    ) {
+      return
+    }
+
+    const abortController = new AbortController()
+    const fileName = selectedAnalyzerReport.name
+    const content = analyzerReportContent
+    const saveTimeout = window.setTimeout(() => {
+      setReportSaveStatus('saving')
+      setReportSaveError(null)
+
+      void saveReportContent(fileName, content, abortController.signal)
+        .then(() => {
+          if (!abortController.signal.aborted) {
+            lastSavedReport.current = { fileName, content }
+            setReportSaveStatus('saved')
+          }
+        })
+        .catch((error: unknown) => {
+          if (!abortController.signal.aborted) {
+            setReportSaveStatus('error')
+            setReportSaveError(error instanceof Error ? error.message : 'Could not save the report.')
+          }
+        })
+    }, 2000)
+
+    return () => {
+      window.clearTimeout(saveTimeout)
+      abortController.abort()
+    }
+  }, [
+    selectedAnalyzerReport,
+    analyzerReportContent,
+    isLoadingAnalyzerReportContent,
+    analyzerReportContentError,
+  ])
 
   function openAnalyzerReports() {
     setActiveMenu('reports')
@@ -1327,14 +1417,22 @@ function App() {
                       {selectedAnalyzerReport?.name ?? 'Select a report'}
                     </Title>
                     {selectedAnalyzerReport && !isLoadingAnalyzerReportContent && !analyzerReportContentError ? (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        icon={<EyeIcon />}
-                        onClick={() => setIsReportPreviewOpen(true)}
-                      >
-                        View
-                      </Button>
+                      <div className="report-editor-actions">
+                        <small className={`report-save-status report-save-status--${reportSaveStatus}`} role="status">
+                          {reportSaveStatus === 'pending' ? 'Waiting to save' : null}
+                          {reportSaveStatus === 'saving' ? 'Saving...' : null}
+                          {reportSaveStatus === 'saved' ? 'Saved' : null}
+                          {reportSaveStatus === 'error' ? 'Save failed' : null}
+                        </small>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          icon={<EyeIcon />}
+                          onClick={() => setIsReportPreviewOpen(true)}
+                        >
+                          View
+                        </Button>
+                      </div>
                     ) : null}
                   </div>
                   {isLoadingAnalyzerReportContent ? (
@@ -1347,6 +1445,11 @@ function App() {
                       {analyzerReportContentError}
                     </Alert>
                   ) : null}
+                  {reportSaveError ? (
+                    <Alert isInline variant="danger" title="Could not save the report">
+                      {reportSaveError}
+                    </Alert>
+                  ) : null}
                   {!selectedAnalyzerReport ? (
                     <p className="report-editor-empty">Choose a report from the menu to edit its Markdown content.</p>
                   ) : null}
@@ -1356,7 +1459,16 @@ function App() {
                       id="report-markdown-editor"
                       aria-label="Markdown report editor"
                       value={analyzerReportContent}
-                      onChange={(_event, value) => setAnalyzerReportContent(value)}
+                      onChange={(_event, value) => {
+                        setAnalyzerReportContent(value)
+                        setReportSaveStatus(
+                          lastSavedReport.current?.fileName === selectedAnalyzerReport.name
+                          && lastSavedReport.current.content === value
+                            ? 'saved'
+                            : 'pending',
+                        )
+                        setReportSaveError(null)
+                      }}
                       resizeOrientation="vertical"
                     />
                   ) : null}
