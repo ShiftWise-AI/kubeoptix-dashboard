@@ -39,7 +39,7 @@ import {
   Title,
 } from '@patternfly/react-core'
 import type { TreeViewDataItem } from '@patternfly/react-core'
-import { ChartLineIcon, EyeIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
+import { ChartLineIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
 import MarkdownViewer from './MarkdownViewer'
 import dashboardLogo from '../image/logo.png'
 
@@ -95,6 +95,10 @@ const REPORTER_API_PATH = '/api/reporter'
 
 function getReporterReportPath(fileName: string): string {
   return `${REPORTER_API_PATH}/report/${encodeURIComponent(fileName)}`
+}
+
+function getReporterReportPdfPath(fileName: string): string {
+  return `${getReporterReportPath(fileName)}/pdf`
 }
 
 const initialResponseState = (): ApiResponseState => ({
@@ -330,6 +334,31 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
   }
 }
 
+async function fetchReportPdf(fileName: string): Promise<Blob> {
+  const response = await fetch(getReporterReportPdfPath(fileName), {
+    method: 'GET',
+    headers: { Accept: 'application/pdf' },
+  })
+
+  if (!response.ok) {
+    const responseText = await response.text()
+    let message = responseText || `Request failed with status ${response.status}`
+
+    try {
+      const payload = JSON.parse(responseText) as unknown
+      if (typeof payload === 'object' && payload !== null && 'error' in payload) {
+        message = String(payload.error)
+      }
+    } catch {
+      // Keep the plain-text response as the error message.
+    }
+
+    throw new ApiRequestError(message, response.status, responseText)
+  }
+
+  return response.blob()
+}
+
 function App() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
@@ -360,6 +389,8 @@ function App() {
   const [analyzerReportContentError, setAnalyzerReportContentError] = useState<string | null>(null)
   const [reportSaveStatus, setReportSaveStatus] = useState<ReportSaveStatus>('idle')
   const [reportSaveError, setReportSaveError] = useState<string | null>(null)
+  const [isExportingReportPdf, setIsExportingReportPdf] = useState(false)
+  const [reportPdfError, setReportPdfError] = useState<string | null>(null)
   const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
   const reportLoadSequence = useRef(0)
   const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
@@ -485,6 +516,7 @@ function App() {
     setAnalyzerReportContentError(null)
     setReportSaveStatus('idle')
     setReportSaveError(null)
+    setReportPdfError(null)
     lastSavedReport.current = null
     setIsLoadingAnalyzerReportContent(true)
 
@@ -557,6 +589,31 @@ function App() {
 
   function openAnalyzerReports() {
     setActiveMenu('reports')
+  }
+
+  async function exportSelectedReportPdf() {
+    if (!selectedAnalyzerReport) {
+      return
+    }
+
+    setIsExportingReportPdf(true)
+    setReportPdfError(null)
+
+    try {
+      const pdf = await fetchReportPdf(selectedAnalyzerReport.name)
+      const downloadUrl = URL.createObjectURL(pdf)
+      const downloadLink = document.createElement('a')
+      downloadLink.href = downloadUrl
+      downloadLink.download = selectedAnalyzerReport.name.replace(/\.md$/i, '') + '.pdf'
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      setReportPdfError(error instanceof Error ? error.message : 'Could not export the report as PDF.')
+    } finally {
+      setIsExportingReportPdf(false)
+    }
   }
 
   useEffect(() => {
@@ -1487,10 +1544,25 @@ function App() {
               labelId="report-preview-modal-title"
             />
             <ModalBody id="report-preview-modal-description">
+              {reportPdfError ? (
+                <Alert isInline variant="danger" title="Could not export the report as PDF">
+                  {reportPdfError}
+                </Alert>
+              ) : null}
               <MarkdownViewer content={analyzerReportContent} colorScheme={colorScheme} />
             </ModalBody>
             <ModalFooter>
-              <Button variant="primary" onClick={() => setIsReportPreviewOpen(false)}>Close</Button>
+              <Button
+                type="button"
+                variant="primary"
+                icon={<FilePdfIcon />}
+                onClick={() => void exportSelectedReportPdf()}
+                isLoading={isExportingReportPdf}
+                isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
+              >
+                Export PDF
+              </Button>
+              <Button variant="link" onClick={() => setIsReportPreviewOpen(false)}>Close</Button>
             </ModalFooter>
           </Modal>
         </PageSection>
