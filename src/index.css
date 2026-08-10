@@ -156,16 +156,316 @@ body {
   overflow: auto;
 }
 
-.report-file-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid var(--pf-t--global--border--color--subtle);
+.report-files-menu {
+  width: 100%;
+  max-height: 28rem;
+  overflow: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
 }
 
-.report-file-row:last-child {
-  border-bottom: 0;
+.reports-page-heading {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.reports-workspace {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: 1rem;
+  min-height: 32rem;
+}
+
+.reports-list-panel,
+.report-editor-panel {
+  min-width: 0;
+}
+
+.report-editor-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.report-editor-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.report-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.report-save-status {
+  min-width: 5.5rem;
+  color: var(--pf-t--global--text--color--subtle);
+  text-align: right;
+}
+
+.report-save-status--saved {
+  color: var(--pf-t--global--color--status--success--default);
+}
+
+.report-save-status--error {
+  color: var(--pf-t--global--color--status--danger--default);
+}
+
+.report-editor-empty {
+  margin: 0;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.report-editor-loading {
+  min-height: 32rem;
+  display: grid;
+  place-items: center;
+}
+
+.report-markdown-editor {
+  width: 100%;
+  min-height: 32rem;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.report-preview-modal {
+  max-height: 92vh;
+}
+
+.markdown-viewer {
+  width: min(100%, 68rem);
+  min-height: 30rem;
+  margin-inline: auto;
+  padding: 0.5rem clamp(0rem, 2vw, 1.5rem) 2rem;
+  color: var(--pf-t--global--text--color--regular);
+  font-family: var(--pf-t--global--font--family--body);
+  font-size: 1rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.markdown-viewer > :first-child {
+  margin-top: 0;
+}
+
+.markdown-viewer > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-viewer h1,
+.markdown-viewer h2,
+.markdown-viewer h3,
+.markdown-viewer h4,
+.markdown-viewer h5,
+.markdown-viewer h6 {
+  color: var(--pf-t--global--text--color--regular);
+  font-family: var(--pf-t--global--font--family--heading);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  letter-spacing: 0;
+  line-height: 1.25;
+  scroll-margin-top: 1rem;
+}
+
+.markdown-viewer h1 {
+  margin: 0 0 1.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--pf-t--global--color--brand--default);
+  font-size: 2rem;
+}
+
+.markdown-viewer h2 {
+  margin: 2.5rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  font-size: 1.5rem;
+}
+
+.markdown-viewer h3 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.25rem;
+}
+
+.markdown-viewer h4 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1.075rem;
+}
+
+.markdown-viewer h5,
+.markdown-viewer h6 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.markdown-viewer p,
+.markdown-viewer ul,
+.markdown-viewer ol,
+.markdown-viewer blockquote,
+.markdown-viewer table,
+.markdown-viewer pre {
+  margin-block: 0 1.25rem;
+}
+
+.markdown-viewer ul,
+.markdown-viewer ol {
+  padding-inline-start: 1.5rem;
+}
+
+.markdown-viewer li + li {
+  margin-top: 0.35rem;
+}
+
+.markdown-viewer a {
+  color: var(--pf-t--global--text--color--link--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  text-underline-offset: 0.2em;
+}
+
+.markdown-viewer a:hover {
+  color: var(--pf-t--global--text--color--link--hover);
+}
+
+.markdown-viewer hr {
+  margin: 2.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+}
+
+.markdown-viewer blockquote {
+  padding: 0.75rem 1rem;
+  border-inline-start: 4px solid var(--pf-t--global--color--brand--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.markdown-viewer blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-viewer img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
+}
+
+.markdown-viewer pre {
+  max-width: 100%;
+  padding: 1rem 1.125rem;
+  overflow: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
+  background: var(--pf-t--global--background--color--secondary--default);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.markdown-viewer pre:has(.markdown-mermaid-diagram) {
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.markdown-viewer :not(pre) > code {
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+  background: var(--pf-t--global--background--color--secondary--default);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.875em;
+}
+
+.markdown-viewer table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.925rem;
+}
+
+.markdown-viewer th,
+.markdown-viewer td {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  text-align: start;
+  vertical-align: top;
+}
+
+.markdown-viewer th {
+  background: var(--pf-t--global--background--color--secondary--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.markdown-viewer tbody tr:nth-child(even) {
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.markdown-mermaid-diagram {
+  width: 100%;
+  margin: 2rem 0;
+  padding: 1rem;
+  overflow: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.markdown-mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-mermaid-loading,
+.markdown-mermaid-error {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
+}
+
+.markdown-mermaid-error {
+  color: var(--pf-t--global--color--status--danger--default);
+}
+
+@media (max-width: 768px) {
+  .reports-workspace {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .report-markdown-editor {
+    min-height: 24rem;
+  }
+
+  .markdown-viewer {
+    padding-inline: 0;
+    font-size: 0.95rem;
+  }
+
+  .markdown-viewer h1 {
+    font-size: 1.65rem;
+  }
+
+  .markdown-viewer h2 {
+    font-size: 1.35rem;
+  }
+
+  .markdown-viewer h3 {
+    font-size: 1.15rem;
+  }
 }
 
 .modal-feedback-message {

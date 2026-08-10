@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   Alert,
@@ -14,6 +14,10 @@ import {
   Masthead,
   MastheadBrand,
   MastheadContent,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuList,
   Modal,
   ModalBody,
   ModalFooter,
@@ -29,17 +33,20 @@ import {
   Radio,
   Spinner,
   Switch,
+  TextArea,
   TextInput,
   TreeView,
   Title,
 } from '@patternfly/react-core'
 import type { TreeViewDataItem } from '@patternfly/react-core'
-import { ChartLineIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
+import { ChartLineIcon, EyeIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
+import MarkdownViewer from './MarkdownViewer'
 import dashboardLogo from '../image/logo.png'
 
-type MenuKey = 'harvester' | 'analyzer'
+type MenuKey = 'harvester' | 'analyzer' | 'reports'
 type AnalyzerMode = 'local' | 'llm'
 type ColorScheme = 'light' | 'dark'
+type ReportSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
 type ApiResponseState = {
   pending: boolean
@@ -84,6 +91,11 @@ const ANALYZER_RUN_PATH = `${ANALYZER_API_PATH}/run`
 const ANALYZER_STATUS_PATH = `${ANALYZER_API_PATH}/status`
 const ANALYZER_CLEANUP_PATH = `${ANALYZER_API_PATH}/reports`
 const ANALYZER_REPORT_FILES_PATH = `${ANALYZER_API_PATH}/reports/files`
+const REPORTER_API_PATH = '/api/reporter'
+
+function getReporterReportPath(fileName: string): string {
+  return `${REPORTER_API_PATH}/report/${encodeURIComponent(fileName)}`
+}
 
 const initialResponseState = (): ApiResponseState => ({
   pending: false,
@@ -257,6 +269,67 @@ async function executeRequest(
   return { statusCode: response.status, payload }
 }
 
+async function fetchReportContent(fileName: string): Promise<string> {
+  const response = await fetch(getReporterReportPath(fileName), {
+    method: 'GET',
+    headers: { Accept: 'text/markdown, text/plain' },
+  })
+  const text = await response.text()
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`
+
+    try {
+      const payload = JSON.parse(text) as unknown
+      if (typeof payload === 'object' && payload !== null && 'error' in payload) {
+        message = String(payload.error)
+      }
+    } catch {
+      if (text.trim()) {
+        message = text
+      }
+    }
+
+    throw new ApiRequestError(message, response.status, text)
+  }
+
+  try {
+    const payload = JSON.parse(text) as unknown
+    if (typeof payload === 'object' && payload !== null && 'content' in payload) {
+      const content = (payload as Record<string, unknown>).content
+      return typeof content === 'string' ? content : JSON.stringify(content, null, 2)
+    }
+    return JSON.stringify(payload, null, 2)
+  } catch {
+    return text
+  }
+}
+
+async function saveReportContent(fileName: string, content: string, signal: AbortSignal): Promise<void> {
+  const response = await fetch(getReporterReportPath(fileName), {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/markdown; charset=utf-8' },
+    body: content,
+    signal,
+  })
+
+  if (!response.ok) {
+    const responseText = await response.text()
+    let message = responseText || `Request failed with status ${response.status}`
+
+    try {
+      const payload = JSON.parse(responseText) as unknown
+      if (typeof payload === 'object' && payload !== null && 'error' in payload) {
+        message = String(payload.error)
+      }
+    } catch {
+      // Keep the plain-text response as the error message.
+    }
+
+    throw new ApiRequestError(message, response.status, responseText)
+  }
+}
+
 function App() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
@@ -277,11 +350,19 @@ function App() {
   const [mode, setMode] = useState<AnalyzerMode>('local')
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
   const [isDeleteReportsModalOpen, setIsDeleteReportsModalOpen] = useState(false)
-  const [isAnalyzerReportsModalOpen, setIsAnalyzerReportsModalOpen] = useState(false)
   const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
   const [analyzerReports, setAnalyzerReports] = useState<AnalyzerReportFile[]>([])
   const [isLoadingAnalyzerReports, setIsLoadingAnalyzerReports] = useState(false)
   const [analyzerReportsError, setAnalyzerReportsError] = useState<string | null>(null)
+  const [selectedAnalyzerReport, setSelectedAnalyzerReport] = useState<AnalyzerReportFile | null>(null)
+  const [analyzerReportContent, setAnalyzerReportContent] = useState('')
+  const [isLoadingAnalyzerReportContent, setIsLoadingAnalyzerReportContent] = useState(false)
+  const [analyzerReportContentError, setAnalyzerReportContentError] = useState<string | null>(null)
+  const [reportSaveStatus, setReportSaveStatus] = useState<ReportSaveStatus>('idle')
+  const [reportSaveError, setReportSaveError] = useState<string | null>(null)
+  const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
+  const reportLoadSequence = useRef(0)
+  const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
   const [assessmentTree, setAssessmentTree] = useState<TreeViewDataItem[]>([])
   const [isLoadingAssessmentTree, setIsLoadingAssessmentTree] = useState(false)
   const [assessmentTreeError, setAssessmentTreeError] = useState<string | null>(null)
@@ -397,6 +478,87 @@ function App() {
     }
   }
 
+  async function openAnalyzerReport(report: AnalyzerReportFile) {
+    const loadSequence = ++reportLoadSequence.current
+    setSelectedAnalyzerReport(report)
+    setAnalyzerReportContent('')
+    setAnalyzerReportContentError(null)
+    setReportSaveStatus('idle')
+    setReportSaveError(null)
+    lastSavedReport.current = null
+    setIsLoadingAnalyzerReportContent(true)
+
+    try {
+      const content = await fetchReportContent(report.name)
+      if (loadSequence !== reportLoadSequence.current) {
+        return
+      }
+      lastSavedReport.current = { fileName: report.name, content }
+      setAnalyzerReportContent(content)
+    } catch (error) {
+      if (loadSequence !== reportLoadSequence.current) {
+        return
+      }
+      setAnalyzerReportContentError(
+        error instanceof Error ? error.message : 'Could not load the report.',
+      )
+    } finally {
+      if (loadSequence === reportLoadSequence.current) {
+        setIsLoadingAnalyzerReportContent(false)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (
+      !selectedAnalyzerReport
+      || isLoadingAnalyzerReportContent
+      || analyzerReportContentError
+      || (
+        lastSavedReport.current?.fileName === selectedAnalyzerReport.name
+        && lastSavedReport.current.content === analyzerReportContent
+      )
+    ) {
+      return
+    }
+
+    const abortController = new AbortController()
+    const fileName = selectedAnalyzerReport.name
+    const content = analyzerReportContent
+    const saveTimeout = window.setTimeout(() => {
+      setReportSaveStatus('saving')
+      setReportSaveError(null)
+
+      void saveReportContent(fileName, content, abortController.signal)
+        .then(() => {
+          if (!abortController.signal.aborted) {
+            lastSavedReport.current = { fileName, content }
+            setReportSaveStatus('saved')
+          }
+        })
+        .catch((error: unknown) => {
+          if (!abortController.signal.aborted) {
+            setReportSaveStatus('error')
+            setReportSaveError(error instanceof Error ? error.message : 'Could not save the report.')
+          }
+        })
+    }, 2000)
+
+    return () => {
+      window.clearTimeout(saveTimeout)
+      abortController.abort()
+    }
+  }, [
+    selectedAnalyzerReport,
+    analyzerReportContent,
+    isLoadingAnalyzerReportContent,
+    analyzerReportContentError,
+  ])
+
+  function openAnalyzerReports() {
+    setActiveMenu('reports')
+  }
+
   useEffect(() => {
     if (
       activeMenu === 'analyzer'
@@ -417,24 +579,18 @@ function App() {
   useEffect(() => {
     if (activeMenu === 'harvester') {
       setIsDeleteReportsModalOpen(false)
-      setIsAnalyzerReportsModalOpen(false)
       void loadNamespaces()
       return
     }
 
     setIsDeleteAssessmentModalOpen(false)
     setIsAssessmentFilesModalOpen(false)
-    void loadAnalyzerNamespaces()
-    void loadAnalyzerReports()
-  }, [activeMenu])
-
-  useEffect(() => {
-    if (!isAnalyzerReportsModalOpen) {
-      return
+    if (activeMenu === 'analyzer') {
+      void loadAnalyzerNamespaces()
+    } else {
+      void loadAnalyzerReports()
     }
-
-    void loadAnalyzerReports()
-  }, [isAnalyzerReportsModalOpen])
+  }, [activeMenu])
 
   useEffect(() => {
     if (!isCollectionStatusPolling) {
@@ -790,6 +946,14 @@ function App() {
           <NavItem itemId="analyzer" isActive={activeMenu === 'analyzer'} disabled={isCollectionInProgress} onClick={() => setActiveMenu('analyzer')}>
             Analyzer
           </NavItem>
+          <NavItem
+            itemId="reports"
+            isActive={activeMenu === 'reports'}
+            disabled={isCollectionInProgress || isAnalyzerInProgress}
+            onClick={openAnalyzerReports}
+          >
+            Reports
+          </NavItem>
         </NavList>
       </Nav>
     </PageSidebar>
@@ -1010,7 +1174,7 @@ function App() {
           </Modal>
 
         </>
-      ) : (
+      ) : activeMenu === 'analyzer' ? (
         <>
           <PageSection>
             <Card className="pf-v5-c-card">
@@ -1027,7 +1191,7 @@ function App() {
                       <Button
                         variant="secondary"
                         icon={<FolderOpenIcon />}
-                        onClick={() => setIsAnalyzerReportsModalOpen(true)}
+                        onClick={openAnalyzerReports}
                         isDisabled={isAnalyzerInProgress}
                       >
                         View reports
@@ -1193,53 +1357,143 @@ function App() {
               </Button>
             </ModalFooter>
           </Modal>
-
-          <Modal
-            className="assessment-files-modal-box"
-            backdropClassName="assessment-files-modal-backdrop"
-            width="min(42rem, 92vw)"
-            isOpen={isAnalyzerReportsModalOpen}
-            onClose={() => setIsAnalyzerReportsModalOpen(false)}
-          >
-            <ModalHeader title="Analyzer reports" labelId="analyzer-reports-modal-title" />
-            <ModalBody id="analyzer-reports-modal-description">
-              {isLoadingAnalyzerReports ? (
-                <div className="assessment-tree-loading">
-                  <Spinner size="lg" aria-label="Loading analyzer reports" />
-                </div>
-              ) : null}
+        </>
+      ) : (
+        <PageSection>
+          <Card className="pf-v5-c-card">
+            <CardHeader>
+              <div className="reports-page-heading">
+                <Title headingLevel="h2" size="xl">Reports Analyzer</Title>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={loadAnalyzerReports}
+                  isDisabled={isLoadingAnalyzerReports || isAnalyzerInProgress}
+                >
+                  {isLoadingAnalyzerReports ? 'Refreshing...' : 'Refresh'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardBody>
               {analyzerReportsError ? (
-                <p className="modal-feedback-message is-warning">Could not update report files: {analyzerReportsError}</p>
+                <Alert isInline variant="warning" title="Could not update report files">
+                  {analyzerReportsError}
+                </Alert>
               ) : null}
-              {!isLoadingAnalyzerReports && !analyzerReportsError && analyzerReports.length === 0 ? (
-                <small>No reports found.</small>
-              ) : null}
-              {!isLoadingAnalyzerReports && analyzerReports.length > 0 ? (
-                <div className="assessment-tree-container">
-                  {analyzerReports.map((report) => (
-                    <div key={report.name} className="report-file-row">
-                      <strong>{report.name}</strong>
-                      {report.createdAt ? <small>{report.createdAt}</small> : null}
+              <div className="reports-workspace">
+                <div className="reports-list-panel">
+                  {isLoadingAnalyzerReports ? (
+                    <div className="assessment-tree-loading">
+                      <Spinner size="lg" aria-label="Loading analyzer reports" />
                     </div>
-                  ))}
+                  ) : null}
+                  {!isLoadingAnalyzerReports && !analyzerReportsError && analyzerReports.length === 0 ? (
+                    <small>No reports found.</small>
+                  ) : null}
+                  {!isLoadingAnalyzerReports && analyzerReports.length > 0 ? (
+                    <Menu className="report-files-menu" aria-label="Analyzer report files">
+                      <MenuContent>
+                        <MenuList>
+                          {analyzerReports.map((report) => (
+                            <MenuItem
+                              key={report.name}
+                              itemId={report.name}
+                              isSelected={selectedAnalyzerReport?.name === report.name}
+                              icon={<FileAltIcon />}
+                              description={report.createdAt ?? undefined}
+                              onClick={() => void openAnalyzerReport(report)}
+                            >
+                              {report.name}
+                            </MenuItem>
+                          ))}
+                        </MenuList>
+                      </MenuContent>
+                    </Menu>
+                  ) : null}
                 </div>
-              ) : null}
+                <section className="report-editor-panel" aria-live="polite">
+                  <div className="report-editor-heading">
+                    <Title headingLevel="h3" size="lg">
+                      {selectedAnalyzerReport?.name ?? 'Select a report'}
+                    </Title>
+                    {selectedAnalyzerReport && !isLoadingAnalyzerReportContent && !analyzerReportContentError ? (
+                      <div className="report-editor-actions">
+                        <small className={`report-save-status report-save-status--${reportSaveStatus}`} role="status">
+                          {reportSaveStatus === 'pending' ? 'Waiting to save' : null}
+                          {reportSaveStatus === 'saving' ? 'Saving...' : null}
+                          {reportSaveStatus === 'saved' ? 'Saved' : null}
+                          {reportSaveStatus === 'error' ? 'Save failed' : null}
+                        </small>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          icon={<EyeIcon />}
+                          onClick={() => setIsReportPreviewOpen(true)}
+                        >
+                          View
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                  {isLoadingAnalyzerReportContent ? (
+                    <div className="report-editor-loading">
+                      <Spinner size="lg" aria-label="Loading analyzer report" />
+                    </div>
+                  ) : null}
+                  {analyzerReportContentError ? (
+                    <Alert isInline variant="danger" title="Could not load the report">
+                      {analyzerReportContentError}
+                    </Alert>
+                  ) : null}
+                  {reportSaveError ? (
+                    <Alert isInline variant="danger" title="Could not save the report">
+                      {reportSaveError}
+                    </Alert>
+                  ) : null}
+                  {!selectedAnalyzerReport ? (
+                    <p className="report-editor-empty">Choose a report from the menu to edit its Markdown content.</p>
+                  ) : null}
+                  {selectedAnalyzerReport && !isLoadingAnalyzerReportContent && !analyzerReportContentError ? (
+                    <TextArea
+                      className="report-markdown-editor"
+                      id="report-markdown-editor"
+                      aria-label="Markdown report editor"
+                      value={analyzerReportContent}
+                      onChange={(_event, value) => {
+                        setAnalyzerReportContent(value)
+                        setReportSaveStatus(
+                          lastSavedReport.current?.fileName === selectedAnalyzerReport.name
+                          && lastSavedReport.current.content === value
+                            ? 'saved'
+                            : 'pending',
+                        )
+                        setReportSaveError(null)
+                      }}
+                      resizeOrientation="vertical"
+                    />
+                  ) : null}
+                </section>
+              </div>
+            </CardBody>
+          </Card>
+          <Modal
+            className="report-preview-modal"
+            width="min(76rem, 94vw)"
+            isOpen={isReportPreviewOpen}
+            onClose={() => setIsReportPreviewOpen(false)}
+          >
+            <ModalHeader
+              title={selectedAnalyzerReport?.name ?? 'Report preview'}
+              labelId="report-preview-modal-title"
+            />
+            <ModalBody id="report-preview-modal-description">
+              <MarkdownViewer content={analyzerReportContent} colorScheme={colorScheme} />
             </ModalBody>
             <ModalFooter>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={loadAnalyzerReports}
-                isDisabled={isLoadingAnalyzerReports || isAnalyzerInProgress}
-              >
-                {isLoadingAnalyzerReports ? 'Refreshing...' : 'Refresh'}
-              </Button>
-              <Button variant="link" onClick={() => setIsAnalyzerReportsModalOpen(false)}>
-                Close
-              </Button>
+              <Button variant="primary" onClick={() => setIsReportPreviewOpen(false)}>Close</Button>
             </ModalFooter>
           </Modal>
-        </>
+        </PageSection>
       )}
     </Page>
   )

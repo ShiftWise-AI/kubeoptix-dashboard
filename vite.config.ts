@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   const isDevelopment = mode === 'development' || process.env.ENV === 'development'
   const harvesterApiUrl = env.HARVESTER_API_URL ?? 'http://harvester:8000'
   const analyzerApiUrl = env.ANALYZER_API_URL ?? 'http://analyzer-api:8000'
+  const reporterApiUrl = env.REPORTER_API_URL ?? 'https://reporter-shiftwise-ai.apps-crc.testing'
 
   return {
     plugins: [react()],
@@ -35,6 +36,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path.replace(/^\/api\/analyzer/, ''),
+        },
+        '/api/reporter': {
+          target: reporterApiUrl,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/api\/reporter/, ''),
         },
       },
     },
