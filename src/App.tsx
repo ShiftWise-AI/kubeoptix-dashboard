@@ -60,6 +60,15 @@ type AnalyzerReportFile = {
   createdAt: string | null
 }
 
+type PdfExportParams = {
+  customer: string
+  description: string
+  version: string
+  status: string
+  author: string
+  projectManager: string
+}
+
 class ApiRequestError extends Error {
   readonly statusCode: number
   readonly payload: unknown
@@ -97,8 +106,34 @@ function getReporterReportPath(fileName: string): string {
   return `${REPORTER_API_PATH}/report/${encodeURIComponent(fileName)}`
 }
 
-function getReporterReportPdfPath(fileName: string): string {
-  return `${getReporterReportPath(fileName)}/pdf`
+function getReporterReportPdfPath(fileName: string, params?: PdfExportParams): string {
+  const path = `${getReporterReportPath(fileName)}/pdf`
+
+  if (!params) {
+    return path
+  }
+
+  const queryParams = new URLSearchParams({
+    customer: params.customer,
+    description: params.description,
+    version: params.version,
+    status: params.status,
+    author: params.author,
+  })
+  queryParams.set('project-manager', params.projectManager)
+
+  return `${path}?${queryParams.toString()}`
+}
+
+function createInitialPdfExportParams(): PdfExportParams {
+  return {
+    customer: '',
+    description: '',
+    version: '',
+    status: '',
+    author: '',
+    projectManager: '',
+  }
 }
 
 const initialResponseState = (): ApiResponseState => ({
@@ -334,8 +369,8 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
   }
 }
 
-async function fetchReportPdf(fileName: string): Promise<Blob> {
-  const response = await fetch(getReporterReportPdfPath(fileName), {
+async function fetchReportPdf(fileName: string, params: PdfExportParams): Promise<Blob> {
+  const response = await fetch(getReporterReportPdfPath(fileName, params), {
     method: 'GET',
     headers: { Accept: 'application/pdf' },
   })
@@ -391,6 +426,9 @@ function App() {
   const [reportSaveError, setReportSaveError] = useState<string | null>(null)
   const [isExportingReportPdf, setIsExportingReportPdf] = useState(false)
   const [reportPdfError, setReportPdfError] = useState<string | null>(null)
+  const [isReportPdfModalOpen, setIsReportPdfModalOpen] = useState(false)
+  const [pdfExportParams, setPdfExportParams] = useState<PdfExportParams>(createInitialPdfExportParams)
+  const [reportPdfValidationError, setReportPdfValidationError] = useState<string | null>(null)
   const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
   const reportLoadSequence = useRef(0)
   const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
@@ -517,6 +555,8 @@ function App() {
     setReportSaveStatus('idle')
     setReportSaveError(null)
     setReportPdfError(null)
+    setReportPdfValidationError(null)
+    setIsReportPdfModalOpen(false)
     lastSavedReport.current = null
     setIsLoadingAnalyzerReportContent(true)
 
@@ -591,16 +631,49 @@ function App() {
     setActiveMenu('reports')
   }
 
-  async function exportSelectedReportPdf() {
+  function updatePdfExportParam(field: keyof PdfExportParams, value: string) {
+    setPdfExportParams((previousValue) => ({
+      ...previousValue,
+      [field]: value,
+    }))
+  }
+
+  function openReportPdfModal() {
     if (!selectedAnalyzerReport) {
+      return
+    }
+
+    setReportPdfError(null)
+    setReportPdfValidationError(null)
+    setIsReportPdfModalOpen(true)
+  }
+
+  async function exportSelectedReportPdf(params: PdfExportParams) {
+    if (!selectedAnalyzerReport) {
+      return
+    }
+
+    const normalizedParams: PdfExportParams = {
+      customer: params.customer.trim(),
+      description: params.description.trim(),
+      version: params.version.trim(),
+      status: params.status.trim(),
+      author: params.author.trim(),
+      projectManager: params.projectManager.trim(),
+    }
+
+    const hasEmptyRequiredField = Object.values(normalizedParams).some((value) => value.length === 0)
+    if (hasEmptyRequiredField) {
+      setReportPdfValidationError('All PDF parameters are required.')
       return
     }
 
     setIsExportingReportPdf(true)
     setReportPdfError(null)
+    setReportPdfValidationError(null)
 
     try {
-      const pdf = await fetchReportPdf(selectedAnalyzerReport.name)
+      const pdf = await fetchReportPdf(selectedAnalyzerReport.name, normalizedParams)
       const downloadUrl = URL.createObjectURL(pdf)
       const downloadLink = document.createElement('a')
       downloadLink.href = downloadUrl
@@ -609,6 +682,7 @@ function App() {
       downloadLink.click()
       downloadLink.remove()
       URL.revokeObjectURL(downloadUrl)
+      setIsReportPdfModalOpen(false)
     } catch (error) {
       setReportPdfError(error instanceof Error ? error.message : 'Could not export the report as PDF.')
     } finally {
@@ -1556,13 +1630,89 @@ function App() {
                 type="button"
                 variant="primary"
                 icon={<FilePdfIcon />}
-                onClick={() => void exportSelectedReportPdf()}
+                onClick={openReportPdfModal}
                 isLoading={isExportingReportPdf}
                 isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
               >
                 Export PDF
               </Button>
               <Button variant="link" onClick={() => setIsReportPreviewOpen(false)}>Close</Button>
+            </ModalFooter>
+          </Modal>
+          <Modal
+            variant={ModalVariant.medium}
+            isOpen={isReportPdfModalOpen}
+            onClose={() => setIsReportPdfModalOpen(false)}
+          >
+            <ModalHeader title="PDF parameters" labelId="report-pdf-parameters-modal-title" />
+            <ModalBody id="report-pdf-parameters-modal-description">
+              {reportPdfValidationError ? (
+                <Alert isInline variant="warning" title={reportPdfValidationError} />
+              ) : null}
+              {reportPdfError ? (
+                <Alert isInline variant="danger" title="Could not export the report as PDF">
+                  {reportPdfError}
+                </Alert>
+              ) : null}
+              <Form>
+                <FormGroup label="Customer" isRequired fieldId="pdf-customer">
+                  <TextInput
+                    id="pdf-customer"
+                    value={pdfExportParams.customer}
+                    onChange={(_event, value) => updatePdfExportParam('customer', value)}
+                  />
+                </FormGroup>
+                <FormGroup label="Description" isRequired fieldId="pdf-description">
+                  <TextArea
+                    id="pdf-description"
+                    value={pdfExportParams.description}
+                    onChange={(_event, value) => updatePdfExportParam('description', value)}
+                    resizeOrientation="vertical"
+                  />
+                </FormGroup>
+                <FormGroup label="Version" isRequired fieldId="pdf-version">
+                  <TextInput
+                    id="pdf-version"
+                    value={pdfExportParams.version}
+                    onChange={(_event, value) => updatePdfExportParam('version', value)}
+                  />
+                </FormGroup>
+                <FormGroup label="Status" isRequired fieldId="pdf-status">
+                  <TextInput
+                    id="pdf-status"
+                    value={pdfExportParams.status}
+                    onChange={(_event, value) => updatePdfExportParam('status', value)}
+                  />
+                </FormGroup>
+                <FormGroup label="Author" isRequired fieldId="pdf-author">
+                  <TextInput
+                    id="pdf-author"
+                    value={pdfExportParams.author}
+                    onChange={(_event, value) => updatePdfExportParam('author', value)}
+                  />
+                </FormGroup>
+                <FormGroup label="Project manager" isRequired fieldId="pdf-project-manager">
+                  <TextInput
+                    id="pdf-project-manager"
+                    value={pdfExportParams.projectManager}
+                    onChange={(_event, value) => updatePdfExportParam('projectManager', value)}
+                  />
+                </FormGroup>
+              </Form>
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                type="button"
+                variant="primary"
+                icon={<FilePdfIcon />}
+                onClick={() => void exportSelectedReportPdf(pdfExportParams)}
+                isLoading={isExportingReportPdf}
+              >
+                Generate PDF
+              </Button>
+              <Button variant="link" onClick={() => setIsReportPdfModalOpen(false)} isDisabled={isExportingReportPdf}>
+                Cancel
+              </Button>
             </ModalFooter>
           </Modal>
         </PageSection>
