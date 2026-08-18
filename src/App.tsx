@@ -42,9 +42,17 @@ import type { TreeViewDataItem } from '@patternfly/react-core'
 import { ChartLineIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
 import MarkdownViewer from './MarkdownViewer'
 import dashboardLogo from '../image/logo.png'
+import {
+  ANALYZER_ASSESSMENT_NAMESPACES_PATH,
+  ANALYZER_CLEANUP_PATH,
+  ANALYZER_REPORT_FILES_PATH,
+  ANALYZER_STATUS_PATH,
+  getApiPath,
+} from './config/api'
+import { ApiRequestError, executeRequest } from './services/httpClient'
+import { runAnalysis, type AnalysisMode } from './services/analysisService'
 
 type MenuKey = 'harvester' | 'analyzer' | 'reports'
-type AnalyzerMode = 'local' | 'llm'
 type ColorScheme = 'light' | 'dark'
 type ReportSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
@@ -69,37 +77,11 @@ type PdfExportParams = {
   projectManager: string
 }
 
-class ApiRequestError extends Error {
-  readonly statusCode: number
-  readonly payload: unknown
-
-  constructor(message: string, statusCode: number, payload: unknown) {
-    super(message)
-    this.name = 'ApiRequestError'
-    this.statusCode = statusCode
-    this.payload = payload
-  }
-}
-
-function getApiPath(service: 'harvester' | 'analyzer', path: string): string {
-  if (__DEVELOPMENT_MODE__) {
-    return path
-  }
-
-  return `/api/${service}${path}`
-}
-
 const HARVESTER_COLLECT_PATH = getApiPath('harvester', '/collect')
 const HARVESTER_COLLECT_STATUS_PATH = getApiPath('harvester', '/collect/status')
 const HARVESTER_CLEANUP_PATH = getApiPath('harvester', '/assessment')
 const HARVESTER_ASSESSMENT_PATH = getApiPath('harvester', '/assessment')
 const HARVESTER_NAMESPACES_PATH = getApiPath('harvester', '/namespaces')
-const ANALYZER_API_PATH = '/api/analyzer'
-const ANALYZER_ASSESSMENT_NAMESPACES_PATH = `${ANALYZER_API_PATH}/assessment/namespaces`
-const ANALYZER_RUN_PATH = `${ANALYZER_API_PATH}/run`
-const ANALYZER_STATUS_PATH = `${ANALYZER_API_PATH}/status`
-const ANALYZER_CLEANUP_PATH = `${ANALYZER_API_PATH}/reports`
-const ANALYZER_REPORT_FILES_PATH = `${ANALYZER_API_PATH}/reports/files`
 const REPORTER_API_PATH = '/api/reporter'
 
 function getReporterReportPath(fileName: string): string {
@@ -278,36 +260,6 @@ function normalizeAnalyzerReports(payload: unknown): AnalyzerReportFile[] {
     .filter((entry): entry is AnalyzerReportFile => entry !== null)
 }
 
-async function executeRequest(
-  method: 'GET' | 'POST' | 'DELETE',
-  path: string,
-  body?: Record<string, unknown>,
-): Promise<{ statusCode: number; payload: unknown }> {
-  const response = await fetch(path, {
-    method,
-    headers: {
-      Accept: 'application/json',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-
-  const text = await response.text()
-  const payload = text ? JSON.parse(text) : { status: response.statusText }
-
-  if (!response.ok) {
-    throw new ApiRequestError(
-      typeof payload === 'object' && payload !== null && 'error' in payload
-        ? String(payload.error)
-        : `Request failed with status ${response.status}`,
-      response.status,
-      payload,
-    )
-  }
-
-  return { statusCode: response.status, payload }
-}
-
 async function fetchReportContent(fileName: string): Promise<string> {
   const response = await fetch(getReporterReportPath(fileName), {
     method: 'GET',
@@ -411,7 +363,7 @@ function App() {
   const [isLoadingAnalyzerNamespaces, setIsLoadingAnalyzerNamespaces] = useState(false)
   const [loadAnalyzerNamespacesError, setLoadAnalyzerNamespacesError] = useState<string | null>(null)
   const [hasAttemptedAutoLoadAnalyzerNamespaces, setHasAttemptedAutoLoadAnalyzerNamespaces] = useState(false)
-  const [mode, setMode] = useState<AnalyzerMode>('local')
+  const [mode, setMode] = useState<AnalysisMode>('generative')
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
   const [isDeleteReportsModalOpen, setIsDeleteReportsModalOpen] = useState(false)
   const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
@@ -1006,10 +958,21 @@ function App() {
     }))
 
     try {
-      const result = await executeRequest('POST', ANALYZER_RUN_PATH, {
-        mode,
-        namespaces: selectedAnalyzerNamespaces,
-      })
+      const result = await runAnalysis(mode, selectedAnalyzerNamespaces)
+
+      if (!result.requiresStatusPolling) {
+        setAnalyzerProgress(100)
+        setIsAnalyzerInProgress(false)
+        setRunResponse({
+          pending: false,
+          statusCode: result.statusCode,
+          payload: result.payload,
+          error: null,
+        })
+        void loadAnalyzerReports()
+        return
+      }
+
       setRunResponse({
         pending: true,
         statusCode: result.statusCode,
@@ -1018,7 +981,7 @@ function App() {
       })
       setIsAnalyzerStatusPolling(true)
     } catch (error) {
-      if (error instanceof ApiRequestError && error.statusCode === 409) {
+      if (mode === 'generative' && error instanceof ApiRequestError && error.statusCode === 409) {
         setRunResponse({
           pending: true,
           statusCode: error.statusCode,
@@ -1406,20 +1369,20 @@ function App() {
                     <Flex direction={{ default: 'column' }}>
                       <FlexItem>
                         <Radio
-                          id="mode-local"
+                          id="mode-generative"
                           name="mode"
-                          label="local"
-                          isChecked={mode === 'local'}
-                          onChange={() => setMode('local')}
+                          label="Generativa"
+                          isChecked={mode === 'generative'}
+                          onChange={() => setMode('generative')}
                         />
                       </FlexItem>
                       <FlexItem>
                         <Radio
-                          id="mode-llm"
+                          id="mode-predictive"
                           name="mode"
-                          label="llm"
-                          isChecked={mode === 'llm'}
-                          onChange={() => setMode('llm')}
+                          label="Preditiva"
+                          isChecked={mode === 'predictive'}
+                          onChange={() => setMode('predictive')}
                         />
                       </FlexItem>
                     </Flex>

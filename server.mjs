@@ -9,6 +9,9 @@ const analyzerApiUrl = new URL(process.env.ANALYZER_API_URL)
 const reporterApiUrl = new URL(
   process.env.REPORTER_API_URL ?? 'http://reporter-api:8000',
 )
+const coreAiApiUrl = new URL(
+  process.env.CORE_AI_API_URL ?? 'http://core-ai-api:8000',
+)
 const distDirectory = resolve('dist')
 
 const contentTypes = {
@@ -97,6 +100,11 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.url?.startsWith('/api/core-ai')) {
+    await proxyApi(request, response, '/api/core-ai', coreAiApiUrl)
+    return
+  }
+
   if (request.url === '/healthz') {
     sendJson(response, 200, { status: 'ok' })
     return
@@ -110,6 +118,7 @@ server.listen(port, '0.0.0.0', () => {
   console.log(`Harvester API target: ${harvesterApiUrl.origin}`)
   console.log(`Analyzer API target: ${analyzerApiUrl.origin}`)
   console.log(`Reporter API target: ${reporterApiUrl.origin}`)
+  console.log(`Core AI API target: ${coreAiApiUrl.origin}`)
 })
 
 function shutdown(signal) {
