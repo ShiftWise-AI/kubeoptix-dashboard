@@ -9,7 +9,8 @@ PatternFly 6.6.1 frontend for operating KubeOptix Harvester and KubeOptix Analyz
   - `POST /collect`
   - `DELETE /assessment`
 - Analyzer actions:
-  - `POST /run`
+  - `Generativa` mode: `POST /run` (Analyzer API)
+  - `Preditiva` mode: `POST /analysis` (core-ai API)
   - `DELETE /reports`
 - JSON response viewer for each action with HTTP status badge
 
@@ -35,12 +36,14 @@ targets are:
 - `HARVESTER_API_URL=https://harvester-shiftwise-ai.apps-crc.testing`
 - `ANALYZER_API_URL=https://analyzer-shiftwise-ai.apps-crc.testing`
 - `REPORTER_API_URL=https://reporter-shiftwise-ai.apps-crc.testing`
+- `CORE_AI_API_URL=https://core-ai-api-shiftwise-ai.apps-crc.testing`
 
 Proxy paths used by the frontend outside development:
 
 - `/api/harvester/*`
 - `/api/analyzer/*`
 - `/api/reporter/*`
+- `/api/core-ai/*`
 
 ## Environment overrides
 
@@ -57,6 +60,7 @@ For example:
 HARVESTER_API_URL=https://harvester.example.com
 ANALYZER_API_URL=https://analyzer.example.com
 REPORTER_API_URL=https://reporter.example.com
+CORE_AI_API_URL=https://core-ai.example.com
 ```
 
 ## OpenShift deployment
@@ -82,6 +86,10 @@ Analyzer runtime configuration will be added separately.
 The Reporter proxy uses `REPORTER_API_URL=http://reporter-api:8000` in
 OpenShift, so report requests stay on the cluster service network instead of
 using the external Route.
+
+The predictive analyzer proxy uses
+`CORE_AI_API_URL=http://core-ai-api.shiftwise-ai.svc.cluster.local:8000`, so
+`POST /analysis` calls also stay on the internal Service network.
 
 ## Helm installation
 
