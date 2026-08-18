@@ -4,6 +4,8 @@ kind: Route
 metadata:
   name: kubeoptix-dashboard
   namespace: shiftwise-ai
+  annotations:
+    haproxy.router.openshift.io/timeout: 3m
   labels:
     app.kubernetes.io/name: kubeoptix-dashboard
     app.kubernetes.io/part-of: kubeoptix
