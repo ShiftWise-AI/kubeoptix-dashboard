@@ -373,13 +373,6 @@ body {
   line-height: 1.55;
 }
 
-.markdown-viewer pre:has(.markdown-mermaid-diagram) {
-  padding: 0;
-  overflow: visible;
-  border: 0;
-  background: transparent;
-}
-
 .markdown-viewer :not(pre) > code {
   padding: 0.15rem 0.35rem;
   border-radius: 3px;
@@ -411,33 +404,6 @@ body {
 
 .markdown-viewer tbody tr:nth-child(even) {
   background: var(--pf-t--global--background--color--secondary--default);
-}
-
-.markdown-mermaid-diagram {
-  width: 100%;
-  margin: 2rem 0;
-  padding: 1rem;
-  overflow: auto;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: 6px;
-  text-align: center;
-}
-
-.markdown-mermaid-diagram svg {
-  max-width: 100%;
-  height: auto;
-}
-
-.markdown-mermaid-loading,
-.markdown-mermaid-error {
-  margin: 1rem 0;
-  padding: 1rem;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: 6px;
-}
-
-.markdown-mermaid-error {
-  color: var(--pf-t--global--color--status--danger--default);
 }
 
 @media (max-width: 768px) {
