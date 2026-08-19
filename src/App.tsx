@@ -1586,7 +1586,7 @@ function App() {
                   {reportPdfError}
                 </Alert>
               ) : null}
-              <MarkdownViewer content={analyzerReportContent} colorScheme={colorScheme} />
+              <MarkdownViewer content={analyzerReportContent} />
             </ModalBody>
             <ModalFooter>
               <Button
