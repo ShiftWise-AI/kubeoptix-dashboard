@@ -47,13 +47,14 @@ import {
   ANALYZER_CLEANUP_PATH,
   ANALYZER_REPORT_FILES_PATH,
   ANALYZER_STATUS_PATH,
+  CORE_AI_REPORT_STATUS_PATH,
   getApiPath,
 } from './config/api'
 import { ApiRequestError, executeRequest } from './services/httpClient'
 import { runAnalysis, type AnalysisMode } from './services/analysisService'
 
 type MenuKey = 'harvester' | 'analyzer' | 'reports'
-type ColorScheme = 'light' | 'dark'
+type ColorScheme = 'system' | 'dark'
 type ReportSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
 type ApiResponseState = {
@@ -75,6 +76,22 @@ type PdfExportParams = {
   status: string
   author: string
   projectManager: string
+}
+
+const MESSAGE_DISMISS_DELAY_MS = 15_000
+
+function useAutoDismissMessage(message: string | null, clearMessage: () => void) {
+  const clearMessageRef = useRef(clearMessage)
+  clearMessageRef.current = clearMessage
+
+  useEffect(() => {
+    if (!message) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => clearMessageRef.current(), MESSAGE_DISMISS_DELAY_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [message])
 }
 
 const HARVESTER_COLLECT_PATH = getApiPath('harvester', '/collect')
@@ -189,6 +206,14 @@ function normalizeCollectionProgress(payload: unknown): number {
   }
 
   return Math.min(100, Math.max(0, rawProgress))
+}
+
+function normalizeProgressResponse(payload: unknown): number {
+  if (typeof payload === 'object' && payload !== null && 'progress' in payload) {
+    return normalizeCollectionProgress((payload as Record<string, unknown>).progress)
+  }
+
+  return normalizeCollectionProgress(payload)
 }
 
 function normalizeAssessmentTree(payload: unknown, parentPath = ''): TreeViewDataItem {
@@ -349,8 +374,11 @@ async function fetchReportPdf(fileName: string, params: PdfExportParams): Promis
 function App() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
-    return savedValue === 'light' ? 'light' : 'dark'
+    return savedValue === 'dark' ? 'dark' : 'system'
   })
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => (
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  ))
   const [activeMenu, setActiveMenu] = useState<MenuKey>('harvester')
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([])
   const [selectedNamespaces, setSelectedNamespaces] = useState<string[]>([])
@@ -363,7 +391,7 @@ function App() {
   const [isLoadingAnalyzerNamespaces, setIsLoadingAnalyzerNamespaces] = useState(false)
   const [loadAnalyzerNamespacesError, setLoadAnalyzerNamespacesError] = useState<string | null>(null)
   const [hasAttemptedAutoLoadAnalyzerNamespaces, setHasAttemptedAutoLoadAnalyzerNamespaces] = useState(false)
-  const [mode, setMode] = useState<AnalysisMode>('generative')
+  const [mode, setMode] = useState<AnalysisMode>('predictive')
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
   const [isDeleteReportsModalOpen, setIsDeleteReportsModalOpen] = useState(false)
   const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
@@ -384,6 +412,7 @@ function App() {
   const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
   const reportLoadSequence = useRef(0)
   const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
+  const [reportPendingOpen, setReportPendingOpen] = useState<AnalyzerReportFile | null>(null)
   const [assessmentTree, setAssessmentTree] = useState<TreeViewDataItem[]>([])
   const [isLoadingAssessmentTree, setIsLoadingAssessmentTree] = useState(false)
   const [assessmentTreeError, setAssessmentTreeError] = useState<string | null>(null)
@@ -391,12 +420,17 @@ function App() {
   const [isCollectionStatusPolling, setIsCollectionStatusPolling] = useState(false)
   const [hasCollectionStarted, setHasCollectionStarted] = useState(false)
   const [collectionProgress, setCollectionProgress] = useState(0)
+  const [collectionCompletionMessage, setCollectionCompletionMessage] = useState<string | null>(null)
   const [collectionStatusError, setCollectionStatusError] = useState<string | null>(null)
   const [isAnalyzerStatusPolling, setIsAnalyzerStatusPolling] = useState(false)
+  const [isPredictiveStatusPolling, setIsPredictiveStatusPolling] = useState(false)
+  const [predictiveExecutionId, setPredictiveExecutionId] = useState<string | null>(null)
   const [isAnalyzerInProgress, setIsAnalyzerInProgress] = useState(false)
   const [hasAnalyzerStarted, setHasAnalyzerStarted] = useState(false)
   const [analyzerProgress, setAnalyzerProgress] = useState(0)
+  const [analyzerCompletionMessage, setAnalyzerCompletionMessage] = useState<string | null>(null)
   const [analyzerStatusError, setAnalyzerStatusError] = useState<string | null>(null)
+  const [predictiveStatusError, setPredictiveStatusError] = useState<string | null>(null)
 
   const [collectResponse, setCollectResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupAssessmentResponse, setCleanupAssessmentResponse] = useState<ApiResponseState>(initialResponseState)
@@ -404,12 +438,44 @@ function App() {
   const [cleanupReportsResponse, setCleanupReportsResponse] = useState<ApiResponseState>(initialResponseState)
 
   const mastheadLogo = dashboardLogo
+  const collectionCompleted = hasCollectionStarted && !isCollectionInProgress && !collectResponse.error
+  const analysisCompleted = hasAnalyzerStarted
+    && !isAnalyzerInProgress
+    && !analyzerStatusError
+    && !predictiveStatusError
+
+  useAutoDismissMessage(loadNamespacesError, () => setLoadNamespacesError(null))
+  useAutoDismissMessage(loadAnalyzerNamespacesError, () => setLoadAnalyzerNamespacesError(null))
+  useAutoDismissMessage(analyzerReportsError, () => setAnalyzerReportsError(null))
+  useAutoDismissMessage(analyzerReportContentError, () => setAnalyzerReportContentError(null))
+  useAutoDismissMessage(reportSaveError, () => setReportSaveError(null))
+  useAutoDismissMessage(reportPdfError, () => setReportPdfError(null))
+  useAutoDismissMessage(reportPdfValidationError, () => setReportPdfValidationError(null))
+  useAutoDismissMessage(assessmentTreeError, () => setAssessmentTreeError(null))
+  useAutoDismissMessage(collectionStatusError, () => setCollectionStatusError(null))
+  useAutoDismissMessage(analyzerStatusError, () => setAnalyzerStatusError(null))
+  useAutoDismissMessage(predictiveStatusError, () => setPredictiveStatusError(null))
+  useAutoDismissMessage(collectionCompletionMessage, () => setCollectionCompletionMessage(null))
+  useAutoDismissMessage(analyzerCompletionMessage, () => setAnalyzerCompletionMessage(null))
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', colorScheme)
-    document.documentElement.classList.toggle('pf-v6-theme-dark', colorScheme === 'dark')
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+      setSystemPrefersDark(event.matches)
+    }
+
+    setSystemPrefersDark(mediaQuery.matches)
+    mediaQuery.addEventListener('change', handleSystemThemeChange)
+
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange)
+  }, [])
+
+  useEffect(() => {
+    const isDark = colorScheme === 'dark' || (colorScheme === 'system' && systemPrefersDark)
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
+    document.documentElement.classList.toggle('pf-v6-theme-dark', isDark)
     window.localStorage.setItem('kubeoptix-color-scheme', colorScheme)
-  }, [colorScheme])
+  }, [colorScheme, systemPrefersDark])
 
   const filteredNamespaces = useMemo(() => {
     const filterText = namespaceFilter.trim().toLowerCase()
@@ -541,6 +607,37 @@ function App() {
     }
   }
 
+  function hasUnsavedReportChanges(): boolean {
+    return Boolean(
+      selectedAnalyzerReport
+      && lastSavedReport.current?.fileName === selectedAnalyzerReport.name
+      && lastSavedReport.current.content !== analyzerReportContent,
+    )
+  }
+
+  function requestOpenAnalyzerReport(report: AnalyzerReportFile) {
+    if (selectedAnalyzerReport?.name === report.name) {
+      return
+    }
+
+    if (hasUnsavedReportChanges()) {
+      setReportPendingOpen(report)
+      return
+    }
+
+    void openAnalyzerReport(report)
+  }
+
+  function discardAndOpenPendingReport() {
+    if (!reportPendingOpen) {
+      return
+    }
+
+    const report = reportPendingOpen
+    setReportPendingOpen(null)
+    void openAnalyzerReport(report)
+  }
+
   useEffect(() => {
     if (
       !selectedAnalyzerReport
@@ -593,6 +690,7 @@ function App() {
 
   function resetAnalyzerReportViewer() {
     reportLoadSequence.current += 1
+    setReportPendingOpen(null)
     lastSavedReport.current = null
     setSelectedAnalyzerReport(null)
     setAnalyzerReportContent('')
@@ -722,6 +820,9 @@ function App() {
           setIsCollectionStatusPolling(false)
           setIsCollectionInProgress(false)
           setCollectResponse((previousState) => ({ ...previousState, pending: false }))
+          setCollectionCompletionMessage('Collection completed. You can continue to Analyzer.')
+          void loadNamespaces()
+          void loadAnalyzerNamespaces()
           return
         }
       } catch (error) {
@@ -795,6 +896,61 @@ function App() {
   }, [isAssessmentFilesModalOpen])
 
   useEffect(() => {
+    if (!isPredictiveStatusPolling || !predictiveExecutionId) {
+      return
+    }
+
+    let isActive = true
+    let pollingTimeout: number | undefined
+    const executionId = predictiveExecutionId
+
+    async function pollPredictiveStatus() {
+      try {
+        const result = await executeRequest(
+          'GET',
+          `${CORE_AI_REPORT_STATUS_PATH}/${encodeURIComponent(executionId)}/status`,
+        )
+        const progress = normalizeProgressResponse(result.payload)
+
+        if (!isActive) {
+          return
+        }
+
+        setAnalyzerProgress(progress)
+        setPredictiveStatusError(null)
+
+        if (progress >= 100) {
+          setIsPredictiveStatusPolling(false)
+          setIsAnalyzerInProgress(false)
+          setRunResponse((previousState) => ({ ...previousState, pending: false }))
+          setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
+          void loadAnalyzerReports()
+          return
+        }
+      } catch (error) {
+        if (!isActive) {
+          return
+        }
+
+        setPredictiveStatusError(
+          error instanceof Error ? error.message : 'Could not retrieve predictive analysis status.',
+        )
+      }
+
+      pollingTimeout = window.setTimeout(pollPredictiveStatus, 2000)
+    }
+
+    void pollPredictiveStatus()
+
+    return () => {
+      isActive = false
+      if (pollingTimeout !== undefined) {
+        window.clearTimeout(pollingTimeout)
+      }
+    }
+  }, [isPredictiveStatusPolling, predictiveExecutionId])
+
+  useEffect(() => {
     if (!isAnalyzerStatusPolling) {
       return
     }
@@ -805,7 +961,7 @@ function App() {
     async function pollAnalyzerStatus() {
       try {
         const result = await executeRequest('GET', ANALYZER_STATUS_PATH)
-        const progress = normalizeCollectionProgress(result.payload)
+        const progress = normalizeProgressResponse(result.payload)
 
         if (!isActive) {
           return
@@ -818,6 +974,7 @@ function App() {
           setIsAnalyzerStatusPolling(false)
           setIsAnalyzerInProgress(false)
           setRunResponse((previousState) => ({ ...previousState, pending: false }))
+          setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
           void loadAnalyzerReports()
           return
         }
@@ -898,6 +1055,7 @@ function App() {
 
     setCollectionProgress(0)
     setCollectionStatusError(null)
+    setCollectionCompletionMessage(null)
     setIsCollectionStatusPolling(false)
     setHasCollectionStarted(true)
     setIsCollectionInProgress(true)
@@ -971,7 +1129,11 @@ function App() {
 
     setAnalyzerProgress(0)
     setAnalyzerStatusError(null)
+    setPredictiveStatusError(null)
+    setAnalyzerCompletionMessage(null)
     setIsAnalyzerStatusPolling(false)
+    setIsPredictiveStatusPolling(false)
+    setPredictiveExecutionId(null)
     setIsAnalyzerInProgress(true)
     setHasAnalyzerStarted(true)
     setRunResponse((previousState) => ({
@@ -983,9 +1145,26 @@ function App() {
     try {
       const result = await runAnalysis(mode, selectedAnalyzerNamespaces)
 
+      if (mode === 'predictive') {
+        if (!result.executionId) {
+          throw new Error('The predictive analysis did not return an execution ID.')
+        }
+
+        setPredictiveExecutionId(result.executionId)
+        setIsPredictiveStatusPolling(true)
+        setRunResponse({
+          pending: true,
+          statusCode: result.statusCode,
+          payload: result.payload,
+          error: null,
+        })
+        return
+      }
+
       if (!result.requiresStatusPolling) {
         setAnalyzerProgress(100)
         setIsAnalyzerInProgress(false)
+        setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
         setRunResponse({
           pending: false,
           statusCode: result.statusCode,
@@ -1104,10 +1283,10 @@ function App() {
             <div className="masthead-tools">
               <Switch
                 id="color-scheme-switch"
-                label={colorScheme === 'dark' ? 'Dark' : 'Light'}
+                label={colorScheme === 'dark' ? 'Dark' : 'System'}
                 isChecked={colorScheme === 'dark'}
                 isDisabled={isCollectionInProgress}
-                onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'light')}
+                onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'system')}
               />
             </div>
           </MastheadContent>
@@ -1116,6 +1295,47 @@ function App() {
       sidebar={sidebar}
       isManagedSidebar
     >
+      <PageSection className="workflow-section">
+        <nav className="workflow-stepper" aria-label="Workflow progress">
+          <button
+            type="button"
+            className={`workflow-step${activeMenu === 'harvester' ? ' is-active' : ''}${collectionCompleted ? ' is-complete' : ''}`}
+            onClick={() => setActiveMenu('harvester')}
+          >
+            <span className="workflow-step-number">1</span>
+            <span>
+              <strong>Collect data</strong>
+              <small>{collectionCompleted ? 'Completed' : 'Select namespaces and collect'}</small>
+            </span>
+          </button>
+          <span className="workflow-connector" aria-hidden="true" />
+          <button
+            type="button"
+            className={`workflow-step${activeMenu === 'analyzer' ? ' is-active' : ''}${analysisCompleted ? ' is-complete' : ''}`}
+            onClick={() => setActiveMenu('analyzer')}
+            disabled={isCollectionInProgress || (!collectionCompleted && availableAnalyzerNamespaces.length === 0)}
+          >
+            <span className="workflow-step-number">2</span>
+            <span>
+              <strong>Analyze</strong>
+              <small>{analysisCompleted ? 'Completed' : 'Run an analysis'}</small>
+            </span>
+          </button>
+          <span className="workflow-connector" aria-hidden="true" />
+          <button
+            type="button"
+            className={`workflow-step${activeMenu === 'reports' ? ' is-active' : ''}`}
+            onClick={openAnalyzerReports}
+            disabled={isCollectionInProgress || isAnalyzerInProgress || (!analysisCompleted && analyzerReports.length === 0)}
+          >
+            <span className="workflow-step-number">3</span>
+            <span>
+              <strong>Review reports</strong>
+              <small>{analyzerReports.length > 0 ? `${analyzerReports.length} available` : 'View generated reports'}</small>
+            </span>
+          </button>
+        </nav>
+      </PageSection>
       {activeMenu === 'harvester' ? (
         <>
           <PageSection>
@@ -1227,6 +1447,9 @@ function App() {
                           ? 'Collecting data. Status updates every 2 seconds.'
                           : 'Collection completed.'}
                       </p>
+                      {collectionCompletionMessage ? (
+                        <Alert isInline variant="success" title={collectionCompletionMessage} />
+                      ) : null}
                       {collectionStatusError ? (
                         <Alert
                           isInline
@@ -1299,7 +1522,7 @@ function App() {
             <Card className="pf-v5-c-card">
               <CardHeader>
                 <div className="collection-card-heading">
-                  <Title headingLevel="h2" size="xl">KubeOptix Analizer</Title>
+                  <Title headingLevel="h2" size="xl">KubeOptix Analyzer</Title>
                   <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} className="collection-card-header">
                     <FlexItem>
                       <Title headingLevel="h3">
@@ -1320,6 +1543,20 @@ function App() {
                 </div>
               </CardHeader>
               <CardBody>
+                {!isLoadingAnalyzerNamespaces && !loadAnalyzerNamespacesError && availableAnalyzerNamespaces.length === 0 ? (
+                  <Alert
+                    isInline
+                    variant="info"
+                    title="No assessment data available"
+                    actionLinks={[
+                      <Button key="go-to-harvester" variant="link" onClick={() => setActiveMenu('harvester')}>
+                        Go to Harvester
+                      </Button>,
+                    ]}
+                  >
+                    Run a collection in Harvester before starting an analysis.
+                  </Alert>
+                ) : null}
                 <Form onSubmit={handleRunAnalyzer}>
                   <FormGroup label="Namespaces" fieldId="analyzer-namespaces-selector">
                     <Flex gap={{ default: 'gapSm' }}>
@@ -1394,20 +1631,20 @@ function App() {
                     <Flex direction={{ default: 'column' }}>
                       <FlexItem>
                         <Radio
-                          id="mode-generative"
+                          id="mode-predictive"
                           name="mode"
-                          label="Generativa"
-                          isChecked={mode === 'generative'}
-                          onChange={() => setMode('generative')}
+                          label="Predictive AI"
+                          isChecked={mode === 'predictive'}
+                          onChange={() => setMode('predictive')}
                         />
                       </FlexItem>
                       <FlexItem>
                         <Radio
-                          id="mode-predictive"
+                          id="mode-generative"
                           name="mode"
-                          label="Preditiva"
-                          isChecked={mode === 'predictive'}
-                          onChange={() => setMode('predictive')}
+                          label="Generative AI"
+                          isChecked={mode === 'generative'}
+                          onChange={() => setMode('generative')}
                         />
                       </FlexItem>
                     </Flex>
@@ -1442,6 +1679,9 @@ function App() {
                           ? 'Analyzing data. Status updates every 2 seconds.'
                           : 'Analysis completed.'}
                       </p>
+                      {analyzerCompletionMessage ? (
+                        <Alert isInline variant="success" title={analyzerCompletionMessage} />
+                      ) : null}
                       {analyzerStatusError ? (
                         <Alert
                           isInline
@@ -1449,6 +1689,15 @@ function App() {
                           title="Could not update analyzer status. Retrying in 2 seconds."
                         >
                           {analyzerStatusError}
+                        </Alert>
+                      ) : null}
+                      {predictiveStatusError ? (
+                        <Alert
+                          isInline
+                          variant="warning"
+                          title="Could not update Predictive AI status. Retrying in 2 seconds."
+                        >
+                          {predictiveStatusError}
                         </Alert>
                       ) : null}
                     </div>
@@ -1520,7 +1769,7 @@ function App() {
                               isSelected={selectedAnalyzerReport?.name === report.name}
                               icon={<FileAltIcon />}
                               description={report.createdAt ?? undefined}
-                              onClick={() => void openAnalyzerReport(report)}
+                              onClick={() => requestOpenAnalyzerReport(report)}
                             >
                               {report.name}
                             </MenuItem>
@@ -1699,6 +1948,24 @@ function App() {
                 Generate PDF
               </Button>
               <Button variant="link" onClick={() => setIsReportPdfModalOpen(false)} isDisabled={isExportingReportPdf}>
+                Cancel
+              </Button>
+            </ModalFooter>
+          </Modal>
+          <Modal
+            variant={ModalVariant.small}
+            isOpen={reportPendingOpen !== null}
+            onClose={() => setReportPendingOpen(null)}
+          >
+            <ModalHeader title="Unsaved report changes" labelId="report-switch-modal-title" />
+            <ModalBody id="report-switch-modal-description">
+              The current report has changes that have not been saved. Opening another report will discard them.
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="danger" onClick={discardAndOpenPendingReport}>
+                Discard and open
+              </Button>
+              <Button variant="link" onClick={() => setReportPendingOpen(null)}>
                 Cancel
               </Button>
             </ModalFooter>

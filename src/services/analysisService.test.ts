@@ -48,7 +48,7 @@ describe('generative mode', () => {
 
 describe('predictive mode', () => {
   it('posts to the core-ai analysis endpoint with namespaces and enable_ml', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ analysis: [] }))
+    fetchMock.mockResolvedValue(jsonResponse({ analysis: [], execute_id: 'exec-123' }))
 
     const result = await runAnalysis('predictive', ['example-ns-prd', 'other-ns-prd'])
 
@@ -59,7 +59,8 @@ describe('predictive mode', () => {
       namespaces: ['example-ns-prd', 'other-ns-prd'],
       enable_ml: true,
     })
-    expect(result.requiresStatusPolling).toBe(false)
+    expect(result.requiresStatusPolling).toBe(true)
+    expect(result.executionId).toBe('exec-123')
   })
 
   it('propagates core-ai HTTP errors', async () => {

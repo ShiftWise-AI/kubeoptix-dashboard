@@ -18,4 +18,5 @@ export const ANALYZER_REPORT_FILES_PATH = `${ANALYZER_API_PATH}/reports/files`
 
 export const CORE_AI_API_PATH = '/api/core-ai'
 export const CORE_AI_ANALYSIS_PATH = `${CORE_AI_API_PATH}/analysis`
+export const CORE_AI_REPORT_STATUS_PATH = '/api/reports'
 export const CORE_AI_REQUEST_TIMEOUT_MS = 120_000
