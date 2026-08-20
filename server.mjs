@@ -105,6 +105,11 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.url?.startsWith('/api/reports')) {
+    await proxyApi(request, response, '', coreAiApiUrl)
+    return
+  }
+
   if (request.url === '/healthz') {
     sendJson(response, 200, { status: 'ok' })
     return

@@ -50,6 +50,12 @@ export default defineConfig(({ mode }) => {
           secure: false,
           rewrite: (path) => path.replace(/^\/api\/core-ai/, ''),
         },
+        '/api/reports': {
+          target: coreAiApiUrl,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/api\/reports/, '/api/reports'),
+        },
       },
     },
   }

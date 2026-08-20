@@ -47,13 +47,14 @@ import {
   ANALYZER_CLEANUP_PATH,
   ANALYZER_REPORT_FILES_PATH,
   ANALYZER_STATUS_PATH,
+  CORE_AI_REPORT_STATUS_PATH,
   getApiPath,
 } from './config/api'
 import { ApiRequestError, executeRequest } from './services/httpClient'
 import { runAnalysis, type AnalysisMode } from './services/analysisService'
 
 type MenuKey = 'harvester' | 'analyzer' | 'reports'
-type ColorScheme = 'light' | 'dark'
+type ColorScheme = 'system' | 'dark'
 type ReportSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
 type ApiResponseState = {
@@ -205,6 +206,14 @@ function normalizeCollectionProgress(payload: unknown): number {
   }
 
   return Math.min(100, Math.max(0, rawProgress))
+}
+
+function normalizeProgressResponse(payload: unknown): number {
+  if (typeof payload === 'object' && payload !== null && 'progress' in payload) {
+    return normalizeCollectionProgress((payload as Record<string, unknown>).progress)
+  }
+
+  return normalizeCollectionProgress(payload)
 }
 
 function normalizeAssessmentTree(payload: unknown, parentPath = ''): TreeViewDataItem {
@@ -365,8 +374,11 @@ async function fetchReportPdf(fileName: string, params: PdfExportParams): Promis
 function App() {
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
-    return savedValue === 'light' ? 'light' : 'dark'
+    return savedValue === 'dark' ? 'dark' : 'system'
   })
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => (
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  ))
   const [activeMenu, setActiveMenu] = useState<MenuKey>('harvester')
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([])
   const [selectedNamespaces, setSelectedNamespaces] = useState<string[]>([])
@@ -411,11 +423,14 @@ function App() {
   const [collectionCompletionMessage, setCollectionCompletionMessage] = useState<string | null>(null)
   const [collectionStatusError, setCollectionStatusError] = useState<string | null>(null)
   const [isAnalyzerStatusPolling, setIsAnalyzerStatusPolling] = useState(false)
+  const [isPredictiveStatusPolling, setIsPredictiveStatusPolling] = useState(false)
+  const [predictiveExecutionId, setPredictiveExecutionId] = useState<string | null>(null)
   const [isAnalyzerInProgress, setIsAnalyzerInProgress] = useState(false)
   const [hasAnalyzerStarted, setHasAnalyzerStarted] = useState(false)
   const [analyzerProgress, setAnalyzerProgress] = useState(0)
   const [analyzerCompletionMessage, setAnalyzerCompletionMessage] = useState<string | null>(null)
   const [analyzerStatusError, setAnalyzerStatusError] = useState<string | null>(null)
+  const [predictiveStatusError, setPredictiveStatusError] = useState<string | null>(null)
 
   const [collectResponse, setCollectResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupAssessmentResponse, setCleanupAssessmentResponse] = useState<ApiResponseState>(initialResponseState)
@@ -424,7 +439,10 @@ function App() {
 
   const mastheadLogo = dashboardLogo
   const collectionCompleted = hasCollectionStarted && !isCollectionInProgress && !collectResponse.error
-  const analysisCompleted = hasAnalyzerStarted && !isAnalyzerInProgress && !analyzerStatusError
+  const analysisCompleted = hasAnalyzerStarted
+    && !isAnalyzerInProgress
+    && !analyzerStatusError
+    && !predictiveStatusError
 
   useAutoDismissMessage(loadNamespacesError, () => setLoadNamespacesError(null))
   useAutoDismissMessage(loadAnalyzerNamespacesError, () => setLoadAnalyzerNamespacesError(null))
@@ -436,14 +454,28 @@ function App() {
   useAutoDismissMessage(assessmentTreeError, () => setAssessmentTreeError(null))
   useAutoDismissMessage(collectionStatusError, () => setCollectionStatusError(null))
   useAutoDismissMessage(analyzerStatusError, () => setAnalyzerStatusError(null))
+  useAutoDismissMessage(predictiveStatusError, () => setPredictiveStatusError(null))
   useAutoDismissMessage(collectionCompletionMessage, () => setCollectionCompletionMessage(null))
   useAutoDismissMessage(analyzerCompletionMessage, () => setAnalyzerCompletionMessage(null))
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', colorScheme)
-    document.documentElement.classList.toggle('pf-v6-theme-dark', colorScheme === 'dark')
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+      setSystemPrefersDark(event.matches)
+    }
+
+    setSystemPrefersDark(mediaQuery.matches)
+    mediaQuery.addEventListener('change', handleSystemThemeChange)
+
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange)
+  }, [])
+
+  useEffect(() => {
+    const isDark = colorScheme === 'dark' || (colorScheme === 'system' && systemPrefersDark)
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
+    document.documentElement.classList.toggle('pf-v6-theme-dark', isDark)
     window.localStorage.setItem('kubeoptix-color-scheme', colorScheme)
-  }, [colorScheme])
+  }, [colorScheme, systemPrefersDark])
 
   const filteredNamespaces = useMemo(() => {
     const filterText = namespaceFilter.trim().toLowerCase()
@@ -864,6 +896,61 @@ function App() {
   }, [isAssessmentFilesModalOpen])
 
   useEffect(() => {
+    if (!isPredictiveStatusPolling || !predictiveExecutionId) {
+      return
+    }
+
+    let isActive = true
+    let pollingTimeout: number | undefined
+    const executionId = predictiveExecutionId
+
+    async function pollPredictiveStatus() {
+      try {
+        const result = await executeRequest(
+          'GET',
+          `${CORE_AI_REPORT_STATUS_PATH}/${encodeURIComponent(executionId)}/status`,
+        )
+        const progress = normalizeProgressResponse(result.payload)
+
+        if (!isActive) {
+          return
+        }
+
+        setAnalyzerProgress(progress)
+        setPredictiveStatusError(null)
+
+        if (progress >= 100) {
+          setIsPredictiveStatusPolling(false)
+          setIsAnalyzerInProgress(false)
+          setRunResponse((previousState) => ({ ...previousState, pending: false }))
+          setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
+          void loadAnalyzerReports()
+          return
+        }
+      } catch (error) {
+        if (!isActive) {
+          return
+        }
+
+        setPredictiveStatusError(
+          error instanceof Error ? error.message : 'Could not retrieve predictive analysis status.',
+        )
+      }
+
+      pollingTimeout = window.setTimeout(pollPredictiveStatus, 2000)
+    }
+
+    void pollPredictiveStatus()
+
+    return () => {
+      isActive = false
+      if (pollingTimeout !== undefined) {
+        window.clearTimeout(pollingTimeout)
+      }
+    }
+  }, [isPredictiveStatusPolling, predictiveExecutionId])
+
+  useEffect(() => {
     if (!isAnalyzerStatusPolling) {
       return
     }
@@ -874,7 +961,7 @@ function App() {
     async function pollAnalyzerStatus() {
       try {
         const result = await executeRequest('GET', ANALYZER_STATUS_PATH)
-        const progress = normalizeCollectionProgress(result.payload)
+        const progress = normalizeProgressResponse(result.payload)
 
         if (!isActive) {
           return
@@ -1042,8 +1129,11 @@ function App() {
 
     setAnalyzerProgress(0)
     setAnalyzerStatusError(null)
+    setPredictiveStatusError(null)
     setAnalyzerCompletionMessage(null)
     setIsAnalyzerStatusPolling(false)
+    setIsPredictiveStatusPolling(false)
+    setPredictiveExecutionId(null)
     setIsAnalyzerInProgress(true)
     setHasAnalyzerStarted(true)
     setRunResponse((previousState) => ({
@@ -1054,6 +1144,22 @@ function App() {
 
     try {
       const result = await runAnalysis(mode, selectedAnalyzerNamespaces)
+
+      if (mode === 'predictive') {
+        if (!result.executionId) {
+          throw new Error('The predictive analysis did not return an execution ID.')
+        }
+
+        setPredictiveExecutionId(result.executionId)
+        setIsPredictiveStatusPolling(true)
+        setRunResponse({
+          pending: true,
+          statusCode: result.statusCode,
+          payload: result.payload,
+          error: null,
+        })
+        return
+      }
 
       if (!result.requiresStatusPolling) {
         setAnalyzerProgress(100)
@@ -1177,10 +1283,10 @@ function App() {
             <div className="masthead-tools">
               <Switch
                 id="color-scheme-switch"
-                label={colorScheme === 'dark' ? 'Dark' : 'Light'}
+                label={colorScheme === 'dark' ? 'Dark' : 'System'}
                 isChecked={colorScheme === 'dark'}
                 isDisabled={isCollectionInProgress}
-                onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'light')}
+                onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'system')}
               />
             </div>
           </MastheadContent>
@@ -1583,6 +1689,15 @@ function App() {
                           title="Could not update analyzer status. Retrying in 2 seconds."
                         >
                           {analyzerStatusError}
+                        </Alert>
+                      ) : null}
+                      {predictiveStatusError ? (
+                        <Alert
+                          isInline
+                          variant="warning"
+                          title="Could not update Predictive AI status. Retrying in 2 seconds."
+                        >
+                          {predictiveStatusError}
                         </Alert>
                       ) : null}
                     </div>

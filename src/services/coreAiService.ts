@@ -6,6 +6,19 @@ export type PredictiveAnalysisRequest = {
   enableMl?: boolean
 }
 
+export type PredictiveAnalysisResult = ApiResult & {
+  executionId: string
+}
+
+function getExecutionId(payload: object): string | null {
+  const candidate = payload as Record<string, unknown>
+  const executionId = candidate.execute_id
+    ?? candidate.execution_id
+    ?? candidate.executionId
+    ?? candidate.exec_id
+  return typeof executionId === 'string' && executionId.trim() ? executionId : null
+}
+
 function buildPayload(request: PredictiveAnalysisRequest): Record<string, unknown> {
   return {
     namespaces: request.namespaces,
@@ -15,7 +28,7 @@ function buildPayload(request: PredictiveAnalysisRequest): Record<string, unknow
 
 export async function runPredictiveAnalysis(
   request: PredictiveAnalysisRequest,
-): Promise<ApiResult> {
+): Promise<PredictiveAnalysisResult> {
   const result = await executeRequest(
     'POST',
     CORE_AI_ANALYSIS_PATH,
@@ -31,5 +44,14 @@ export async function runPredictiveAnalysis(
     )
   }
 
-  return result
+  const executionId = getExecutionId(result.payload)
+  if (!executionId) {
+    throw new ApiRequestError(
+      'The core-ai API response did not include an execution ID.',
+      result.statusCode,
+      result.payload,
+    )
+  }
+
+  return { ...result, executionId }
 }

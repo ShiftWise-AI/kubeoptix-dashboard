@@ -5,8 +5,8 @@ import type { ApiResult } from './httpClient'
 export type AnalysisMode = 'generative' | 'predictive'
 
 export type AnalysisRunResult = ApiResult & {
-  // Only the generative flow reports progress through the Analyzer status endpoint.
   requiresStatusPolling: boolean
+  executionId?: string
 }
 
 export async function runAnalysis(
@@ -15,7 +15,7 @@ export async function runAnalysis(
 ): Promise<AnalysisRunResult> {
   if (mode === 'predictive') {
     const result = await runPredictiveAnalysis({ namespaces, enableMl: true })
-    return { ...result, requiresStatusPolling: false }
+    return { ...result, requiresStatusPolling: true, executionId: result.executionId }
   }
 
   const result = await runGenerativeAnalysis(namespaces)
