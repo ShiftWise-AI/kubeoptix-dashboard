@@ -77,6 +77,22 @@ type PdfExportParams = {
   projectManager: string
 }
 
+const MESSAGE_DISMISS_DELAY_MS = 15_000
+
+function useAutoDismissMessage(message: string | null, clearMessage: () => void) {
+  const clearMessageRef = useRef(clearMessage)
+  clearMessageRef.current = clearMessage
+
+  useEffect(() => {
+    if (!message) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => clearMessageRef.current(), MESSAGE_DISMISS_DELAY_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [message])
+}
+
 const HARVESTER_COLLECT_PATH = getApiPath('harvester', '/collect')
 const HARVESTER_COLLECT_STATUS_PATH = getApiPath('harvester', '/collect/status')
 const HARVESTER_CLEANUP_PATH = getApiPath('harvester', '/assessment')
@@ -392,11 +408,13 @@ function App() {
   const [isCollectionStatusPolling, setIsCollectionStatusPolling] = useState(false)
   const [hasCollectionStarted, setHasCollectionStarted] = useState(false)
   const [collectionProgress, setCollectionProgress] = useState(0)
+  const [collectionCompletionMessage, setCollectionCompletionMessage] = useState<string | null>(null)
   const [collectionStatusError, setCollectionStatusError] = useState<string | null>(null)
   const [isAnalyzerStatusPolling, setIsAnalyzerStatusPolling] = useState(false)
   const [isAnalyzerInProgress, setIsAnalyzerInProgress] = useState(false)
   const [hasAnalyzerStarted, setHasAnalyzerStarted] = useState(false)
   const [analyzerProgress, setAnalyzerProgress] = useState(0)
+  const [analyzerCompletionMessage, setAnalyzerCompletionMessage] = useState<string | null>(null)
   const [analyzerStatusError, setAnalyzerStatusError] = useState<string | null>(null)
 
   const [collectResponse, setCollectResponse] = useState<ApiResponseState>(initialResponseState)
@@ -407,6 +425,19 @@ function App() {
   const mastheadLogo = dashboardLogo
   const collectionCompleted = hasCollectionStarted && !isCollectionInProgress && !collectResponse.error
   const analysisCompleted = hasAnalyzerStarted && !isAnalyzerInProgress && !analyzerStatusError
+
+  useAutoDismissMessage(loadNamespacesError, () => setLoadNamespacesError(null))
+  useAutoDismissMessage(loadAnalyzerNamespacesError, () => setLoadAnalyzerNamespacesError(null))
+  useAutoDismissMessage(analyzerReportsError, () => setAnalyzerReportsError(null))
+  useAutoDismissMessage(analyzerReportContentError, () => setAnalyzerReportContentError(null))
+  useAutoDismissMessage(reportSaveError, () => setReportSaveError(null))
+  useAutoDismissMessage(reportPdfError, () => setReportPdfError(null))
+  useAutoDismissMessage(reportPdfValidationError, () => setReportPdfValidationError(null))
+  useAutoDismissMessage(assessmentTreeError, () => setAssessmentTreeError(null))
+  useAutoDismissMessage(collectionStatusError, () => setCollectionStatusError(null))
+  useAutoDismissMessage(analyzerStatusError, () => setAnalyzerStatusError(null))
+  useAutoDismissMessage(collectionCompletionMessage, () => setCollectionCompletionMessage(null))
+  useAutoDismissMessage(analyzerCompletionMessage, () => setAnalyzerCompletionMessage(null))
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', colorScheme)
@@ -757,6 +788,7 @@ function App() {
           setIsCollectionStatusPolling(false)
           setIsCollectionInProgress(false)
           setCollectResponse((previousState) => ({ ...previousState, pending: false }))
+          setCollectionCompletionMessage('Collection completed. You can continue to Analyzer.')
           void loadNamespaces()
           void loadAnalyzerNamespaces()
           return
@@ -855,6 +887,7 @@ function App() {
           setIsAnalyzerStatusPolling(false)
           setIsAnalyzerInProgress(false)
           setRunResponse((previousState) => ({ ...previousState, pending: false }))
+          setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
           void loadAnalyzerReports()
           return
         }
@@ -935,6 +968,7 @@ function App() {
 
     setCollectionProgress(0)
     setCollectionStatusError(null)
+    setCollectionCompletionMessage(null)
     setIsCollectionStatusPolling(false)
     setHasCollectionStarted(true)
     setIsCollectionInProgress(true)
@@ -1008,6 +1042,7 @@ function App() {
 
     setAnalyzerProgress(0)
     setAnalyzerStatusError(null)
+    setAnalyzerCompletionMessage(null)
     setIsAnalyzerStatusPolling(false)
     setIsAnalyzerInProgress(true)
     setHasAnalyzerStarted(true)
@@ -1023,6 +1058,7 @@ function App() {
       if (!result.requiresStatusPolling) {
         setAnalyzerProgress(100)
         setIsAnalyzerInProgress(false)
+        setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
         setRunResponse({
           pending: false,
           statusCode: result.statusCode,
@@ -1305,8 +1341,8 @@ function App() {
                           ? 'Collecting data. Status updates every 2 seconds.'
                           : 'Collection completed.'}
                       </p>
-                      {!isCollectionInProgress && !collectResponse.error ? (
-                        <Alert isInline variant="success" title="Collection completed. You can continue to Analyzer." />
+                      {collectionCompletionMessage ? (
+                        <Alert isInline variant="success" title={collectionCompletionMessage} />
                       ) : null}
                       {collectionStatusError ? (
                         <Alert
@@ -1537,8 +1573,8 @@ function App() {
                           ? 'Analyzing data. Status updates every 2 seconds.'
                           : 'Analysis completed.'}
                       </p>
-                      {!isAnalyzerInProgress && !analyzerStatusError ? (
-                        <Alert isInline variant="success" title="Analysis completed. Open Reports to review the results." />
+                      {analyzerCompletionMessage ? (
+                        <Alert isInline variant="success" title={analyzerCompletionMessage} />
                       ) : null}
                       {analyzerStatusError ? (
                         <Alert
