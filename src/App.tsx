@@ -384,6 +384,7 @@ function App() {
   const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
   const reportLoadSequence = useRef(0)
   const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
+  const [reportPendingOpen, setReportPendingOpen] = useState<AnalyzerReportFile | null>(null)
   const [assessmentTree, setAssessmentTree] = useState<TreeViewDataItem[]>([])
   const [isLoadingAssessmentTree, setIsLoadingAssessmentTree] = useState(false)
   const [assessmentTreeError, setAssessmentTreeError] = useState<string | null>(null)
@@ -404,6 +405,8 @@ function App() {
   const [cleanupReportsResponse, setCleanupReportsResponse] = useState<ApiResponseState>(initialResponseState)
 
   const mastheadLogo = dashboardLogo
+  const collectionCompleted = hasCollectionStarted && !isCollectionInProgress && !collectResponse.error
+  const analysisCompleted = hasAnalyzerStarted && !isAnalyzerInProgress && !analyzerStatusError
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', colorScheme)
@@ -541,6 +544,37 @@ function App() {
     }
   }
 
+  function hasUnsavedReportChanges(): boolean {
+    return Boolean(
+      selectedAnalyzerReport
+      && lastSavedReport.current?.fileName === selectedAnalyzerReport.name
+      && lastSavedReport.current.content !== analyzerReportContent,
+    )
+  }
+
+  function requestOpenAnalyzerReport(report: AnalyzerReportFile) {
+    if (selectedAnalyzerReport?.name === report.name) {
+      return
+    }
+
+    if (hasUnsavedReportChanges()) {
+      setReportPendingOpen(report)
+      return
+    }
+
+    void openAnalyzerReport(report)
+  }
+
+  function discardAndOpenPendingReport() {
+    if (!reportPendingOpen) {
+      return
+    }
+
+    const report = reportPendingOpen
+    setReportPendingOpen(null)
+    void openAnalyzerReport(report)
+  }
+
   useEffect(() => {
     if (
       !selectedAnalyzerReport
@@ -593,6 +627,7 @@ function App() {
 
   function resetAnalyzerReportViewer() {
     reportLoadSequence.current += 1
+    setReportPendingOpen(null)
     lastSavedReport.current = null
     setSelectedAnalyzerReport(null)
     setAnalyzerReportContent('')
@@ -722,6 +757,8 @@ function App() {
           setIsCollectionStatusPolling(false)
           setIsCollectionInProgress(false)
           setCollectResponse((previousState) => ({ ...previousState, pending: false }))
+          void loadNamespaces()
+          void loadAnalyzerNamespaces()
           return
         }
       } catch (error) {
@@ -1116,6 +1153,47 @@ function App() {
       sidebar={sidebar}
       isManagedSidebar
     >
+      <PageSection className="workflow-section">
+        <nav className="workflow-stepper" aria-label="Workflow progress">
+          <button
+            type="button"
+            className={`workflow-step${activeMenu === 'harvester' ? ' is-active' : ''}${collectionCompleted ? ' is-complete' : ''}`}
+            onClick={() => setActiveMenu('harvester')}
+          >
+            <span className="workflow-step-number">1</span>
+            <span>
+              <strong>Collect data</strong>
+              <small>{collectionCompleted ? 'Completed' : 'Select namespaces and collect'}</small>
+            </span>
+          </button>
+          <span className="workflow-connector" aria-hidden="true" />
+          <button
+            type="button"
+            className={`workflow-step${activeMenu === 'analyzer' ? ' is-active' : ''}${analysisCompleted ? ' is-complete' : ''}`}
+            onClick={() => setActiveMenu('analyzer')}
+            disabled={isCollectionInProgress || (!collectionCompleted && availableAnalyzerNamespaces.length === 0)}
+          >
+            <span className="workflow-step-number">2</span>
+            <span>
+              <strong>Analyze</strong>
+              <small>{analysisCompleted ? 'Completed' : 'Run an analysis'}</small>
+            </span>
+          </button>
+          <span className="workflow-connector" aria-hidden="true" />
+          <button
+            type="button"
+            className={`workflow-step${activeMenu === 'reports' ? ' is-active' : ''}`}
+            onClick={openAnalyzerReports}
+            disabled={isCollectionInProgress || isAnalyzerInProgress || (!analysisCompleted && analyzerReports.length === 0)}
+          >
+            <span className="workflow-step-number">3</span>
+            <span>
+              <strong>Review reports</strong>
+              <small>{analyzerReports.length > 0 ? `${analyzerReports.length} available` : 'View generated reports'}</small>
+            </span>
+          </button>
+        </nav>
+      </PageSection>
       {activeMenu === 'harvester' ? (
         <>
           <PageSection>
@@ -1227,6 +1305,9 @@ function App() {
                           ? 'Collecting data. Status updates every 2 seconds.'
                           : 'Collection completed.'}
                       </p>
+                      {!isCollectionInProgress && !collectResponse.error ? (
+                        <Alert isInline variant="success" title="Collection completed. You can continue to Analyzer." />
+                      ) : null}
                       {collectionStatusError ? (
                         <Alert
                           isInline
@@ -1299,7 +1380,7 @@ function App() {
             <Card className="pf-v5-c-card">
               <CardHeader>
                 <div className="collection-card-heading">
-                  <Title headingLevel="h2" size="xl">KubeOptix Analizer</Title>
+                  <Title headingLevel="h2" size="xl">KubeOptix Analyzer</Title>
                   <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} className="collection-card-header">
                     <FlexItem>
                       <Title headingLevel="h3">
@@ -1320,6 +1401,20 @@ function App() {
                 </div>
               </CardHeader>
               <CardBody>
+                {!isLoadingAnalyzerNamespaces && !loadAnalyzerNamespacesError && availableAnalyzerNamespaces.length === 0 ? (
+                  <Alert
+                    isInline
+                    variant="info"
+                    title="No assessment data available"
+                    actionLinks={[
+                      <Button key="go-to-harvester" variant="link" onClick={() => setActiveMenu('harvester')}>
+                        Go to Harvester
+                      </Button>,
+                    ]}
+                  >
+                    Run a collection in Harvester before starting an analysis.
+                  </Alert>
+                ) : null}
                 <Form onSubmit={handleRunAnalyzer}>
                   <FormGroup label="Namespaces" fieldId="analyzer-namespaces-selector">
                     <Flex gap={{ default: 'gapSm' }}>
@@ -1442,6 +1537,9 @@ function App() {
                           ? 'Analyzing data. Status updates every 2 seconds.'
                           : 'Analysis completed.'}
                       </p>
+                      {!isAnalyzerInProgress && !analyzerStatusError ? (
+                        <Alert isInline variant="success" title="Analysis completed. Open Reports to review the results." />
+                      ) : null}
                       {analyzerStatusError ? (
                         <Alert
                           isInline
@@ -1520,7 +1618,7 @@ function App() {
                               isSelected={selectedAnalyzerReport?.name === report.name}
                               icon={<FileAltIcon />}
                               description={report.createdAt ?? undefined}
-                              onClick={() => void openAnalyzerReport(report)}
+                              onClick={() => requestOpenAnalyzerReport(report)}
                             >
                               {report.name}
                             </MenuItem>
@@ -1699,6 +1797,24 @@ function App() {
                 Generate PDF
               </Button>
               <Button variant="link" onClick={() => setIsReportPdfModalOpen(false)} isDisabled={isExportingReportPdf}>
+                Cancel
+              </Button>
+            </ModalFooter>
+          </Modal>
+          <Modal
+            variant={ModalVariant.small}
+            isOpen={reportPendingOpen !== null}
+            onClose={() => setReportPendingOpen(null)}
+          >
+            <ModalHeader title="Unsaved report changes" labelId="report-switch-modal-title" />
+            <ModalBody id="report-switch-modal-description">
+              The current report has changes that have not been saved. Opening another report will discard them.
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="danger" onClick={discardAndOpenPendingReport}>
+                Discard and open
+              </Button>
+              <Button variant="link" onClick={() => setReportPendingOpen(null)}>
                 Cancel
               </Button>
             </ModalFooter>
