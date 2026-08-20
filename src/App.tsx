@@ -491,9 +491,17 @@ function App() {
       const result = await executeRequest('GET', ANALYZER_REPORT_FILES_PATH)
       const parsedReports = normalizeAnalyzerReports(result.payload)
       setAnalyzerReports(parsedReports)
+
+      if (
+        selectedAnalyzerReport
+        && !parsedReports.some((report) => report.name === selectedAnalyzerReport.name)
+      ) {
+        resetAnalyzerReportViewer()
+      }
     } catch (error) {
       setAnalyzerReportsError(error instanceof Error ? error.message : 'Could not load report files.')
       setAnalyzerReports([])
+      resetAnalyzerReportViewer()
     } finally {
       setIsLoadingAnalyzerReports(false)
     }
@@ -581,6 +589,21 @@ function App() {
 
   function openAnalyzerReports() {
     setActiveMenu('reports')
+  }
+
+  function resetAnalyzerReportViewer() {
+    reportLoadSequence.current += 1
+    lastSavedReport.current = null
+    setSelectedAnalyzerReport(null)
+    setAnalyzerReportContent('')
+    setIsLoadingAnalyzerReportContent(false)
+    setAnalyzerReportContentError(null)
+    setReportSaveStatus('idle')
+    setReportSaveError(null)
+    setReportPdfError(null)
+    setReportPdfValidationError(null)
+    setIsReportPreviewOpen(false)
+    setIsReportPdfModalOpen(false)
   }
 
   function updatePdfExportParam(field: keyof PdfExportParams, value: string) {
@@ -1013,6 +1036,8 @@ function App() {
 
     try {
       const result = await executeRequest('DELETE', ANALYZER_CLEANUP_PATH)
+      resetAnalyzerReportViewer()
+      setAnalyzerReports([])
       setCleanupReportsResponse({
         pending: false,
         statusCode: result.statusCode,
