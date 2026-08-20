@@ -363,7 +363,7 @@ function App() {
   const [isLoadingAnalyzerNamespaces, setIsLoadingAnalyzerNamespaces] = useState(false)
   const [loadAnalyzerNamespacesError, setLoadAnalyzerNamespacesError] = useState<string | null>(null)
   const [hasAttemptedAutoLoadAnalyzerNamespaces, setHasAttemptedAutoLoadAnalyzerNamespaces] = useState(false)
-  const [mode, setMode] = useState<AnalysisMode>('generative')
+  const [mode, setMode] = useState<AnalysisMode>('predictive')
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
   const [isDeleteReportsModalOpen, setIsDeleteReportsModalOpen] = useState(false)
   const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
@@ -1489,20 +1489,20 @@ function App() {
                     <Flex direction={{ default: 'column' }}>
                       <FlexItem>
                         <Radio
-                          id="mode-generative"
+                          id="mode-predictive"
                           name="mode"
-                          label="Generativa"
-                          isChecked={mode === 'generative'}
-                          onChange={() => setMode('generative')}
+                          label="Predictive AI"
+                          isChecked={mode === 'predictive'}
+                          onChange={() => setMode('predictive')}
                         />
                       </FlexItem>
                       <FlexItem>
                         <Radio
-                          id="mode-predictive"
+                          id="mode-generative"
                           name="mode"
-                          label="Preditiva"
-                          isChecked={mode === 'predictive'}
-                          onChange={() => setMode('predictive')}
+                          label="Generative AI"
+                          isChecked={mode === 'generative'}
+                          onChange={() => setMode('generative')}
                         />
                       </FlexItem>
                     </Flex>
