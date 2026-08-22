@@ -12,6 +12,9 @@ command -v helm >/dev/null 2>&1 || {
   exit 1
 }
 
+# Cleanup must run even if an earlier step aborts the script.
+trap 'printf "Executando limpeza pos-instalacao...\n"; RELEASE_NAME="${RELEASE_NAME}" NAMESPACE="${NAMESPACE}" "${SCRIPT_DIR}/cleanup.sh" || true; bash "${SCRIPT_DIR}/purge-helm-secrets.sh" "${NAMESPACE}" "${RELEASE_NAME}" || true' EXIT
+
 printf 'Instalando %s no namespace %s...\n' "${RELEASE_NAME}" "${NAMESPACE}"
 helm upgrade --install "${RELEASE_NAME}" "${CHART_DIR}" \
   --namespace "${NAMESPACE}" \
@@ -31,10 +34,24 @@ oc get "imagestreamtag/${RELEASE_NAME}:latest" \
   --namespace "${NAMESPACE}" \
   >/dev/null
 
+printf 'Removendo o build concluido...\n'
+BUILD_VERSION="$(oc get "buildconfig/${RELEASE_NAME}" \
+  --namespace "${NAMESPACE}" \
+  -o jsonpath='{.status.lastVersion}')"
+oc delete "build/${RELEASE_NAME}-${BUILD_VERSION}" \
+  --namespace "${NAMESPACE}" \
+  --ignore-not-found \
+  --wait=false >/dev/null
+
 printf 'Criando os demais recursos...\n'
 helm upgrade "${RELEASE_NAME}" "${CHART_DIR}" \
   --namespace "${NAMESPACE}" \
   --set-file environmentFile="${SCRIPT_DIR}/.env.openshift" \
   --set buildOnly=false
+
+printf 'Executando limpeza pos-instalacao...\n'
+RELEASE_NAME="${RELEASE_NAME}" NAMESPACE="${NAMESPACE}" "${SCRIPT_DIR}/cleanup.sh"
+bash "${SCRIPT_DIR}/purge-helm-secrets.sh" "${NAMESPACE}" "${RELEASE_NAME}"
+trap - EXIT
 
 printf 'Instalacao concluida.\n'
