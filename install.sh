@@ -7,13 +7,17 @@ readonly NAMESPACE="shiftwise-ai"
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly CHART_DIR="${SCRIPT_DIR}/helm/kubeoptix-dashboard"
 
+# Exported (not reassigned via a command prefix) since bash rejects VAR=value
+# prefixes on readonly variables even when only the child's env is affected.
+export RELEASE_NAME NAMESPACE
+
 command -v helm >/dev/null 2>&1 || {
   printf 'Erro: Helm nao encontrado.\n' >&2
   exit 1
 }
 
 # Cleanup must run even if an earlier step aborts the script.
-trap 'printf "Executando limpeza pos-instalacao...\n"; RELEASE_NAME="${RELEASE_NAME}" NAMESPACE="${NAMESPACE}" "${SCRIPT_DIR}/cleanup.sh" || true; bash "${SCRIPT_DIR}/purge-helm-secrets.sh" "${NAMESPACE}" "${RELEASE_NAME}" || true' EXIT
+trap 'printf "Executando limpeza pos-instalacao...\n"; "${SCRIPT_DIR}/cleanup.sh" || true; bash "${SCRIPT_DIR}/purge-helm-secrets.sh" "${NAMESPACE}" "${RELEASE_NAME}" || true' EXIT
 
 printf 'Instalando %s no namespace %s...\n' "${RELEASE_NAME}" "${NAMESPACE}"
 helm upgrade --install "${RELEASE_NAME}" "${CHART_DIR}" \
@@ -50,7 +54,7 @@ helm upgrade "${RELEASE_NAME}" "${CHART_DIR}" \
   --set buildOnly=false
 
 printf 'Executando limpeza pos-instalacao...\n'
-RELEASE_NAME="${RELEASE_NAME}" NAMESPACE="${NAMESPACE}" "${SCRIPT_DIR}/cleanup.sh"
+"${SCRIPT_DIR}/cleanup.sh"
 bash "${SCRIPT_DIR}/purge-helm-secrets.sh" "${NAMESPACE}" "${RELEASE_NAME}"
 trap - EXIT
 
