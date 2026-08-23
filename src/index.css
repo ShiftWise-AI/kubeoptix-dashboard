@@ -326,6 +326,34 @@ body {
   line-height: 1.5;
 }
 
+.report-version-panel {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
+  padding: 1rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.report-version-panel__heading {
+  margin-bottom: 0.75rem;
+}
+
+.report-version-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.report-version-form .pf-v6-c-form__group {
+  margin-bottom: 0;
+}
+
+.report-version-panel__actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .report-preview-modal {
   max-height: 92vh;
 }
@@ -501,6 +529,10 @@ body {
 
   .report-markdown-editor {
     min-height: 24rem;
+  }
+
+  .report-version-form {
+    grid-template-columns: 1fr;
   }
 
   .markdown-viewer {

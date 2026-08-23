@@ -39,7 +39,7 @@ import {
   Title,
 } from '@patternfly/react-core'
 import type { TreeViewDataItem } from '@patternfly/react-core'
-import { ChartLineIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
+import { ChartLineIcon, DownloadIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
 import MarkdownViewer from './MarkdownViewer'
 import ConfigurationsPage from './ConfigurationsPage'
 import dashboardLogo from '../image/logo.png'
@@ -410,7 +410,6 @@ function App() {
   const [reportSaveError, setReportSaveError] = useState<string | null>(null)
   const [isExportingReportPdf, setIsExportingReportPdf] = useState(false)
   const [reportPdfError, setReportPdfError] = useState<string | null>(null)
-  const [isReportPdfModalOpen, setIsReportPdfModalOpen] = useState(false)
   const [pdfExportParams, setPdfExportParams] = useState<PdfExportParams>(createInitialPdfExportParams)
   const [reportPdfValidationError, setReportPdfValidationError] = useState<string | null>(null)
   const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
@@ -605,7 +604,6 @@ function App() {
     setReportSaveError(null)
     setReportPdfError(null)
     setReportPdfValidationError(null)
-    setIsReportPdfModalOpen(false)
     lastSavedReport.current = null
     setIsLoadingAnalyzerReportContent(true)
 
@@ -724,7 +722,6 @@ function App() {
     setReportPdfError(null)
     setReportPdfValidationError(null)
     setIsReportPreviewOpen(false)
-    setIsReportPdfModalOpen(false)
   }
 
   function updatePdfExportParam(field: keyof PdfExportParams, value: string) {
@@ -732,16 +729,6 @@ function App() {
       ...previousValue,
       [field]: value,
     }))
-  }
-
-  function openReportPdfModal() {
-    if (!selectedAnalyzerReport) {
-      return
-    }
-
-    setReportPdfError(null)
-    setReportPdfValidationError(null)
-    setIsReportPdfModalOpen(true)
   }
 
   async function exportSelectedReportPdf(params: PdfExportParams) {
@@ -778,12 +765,27 @@ function App() {
       downloadLink.click()
       downloadLink.remove()
       URL.revokeObjectURL(downloadUrl)
-      setIsReportPdfModalOpen(false)
     } catch (error) {
       setReportPdfError(error instanceof Error ? error.message : 'Could not export the report as PDF.')
     } finally {
       setIsExportingReportPdf(false)
     }
+  }
+
+  function downloadSelectedReportMarkdown() {
+    if (!selectedAnalyzerReport) {
+      return
+    }
+
+    const markdownBlob = new Blob([analyzerReportContent], { type: 'text/markdown;charset=utf-8' })
+    const downloadUrl = URL.createObjectURL(markdownBlob)
+    const downloadLink = document.createElement('a')
+    downloadLink.href = downloadUrl
+    downloadLink.download = selectedAnalyzerReport.name
+    document.body.appendChild(downloadLink)
+    downloadLink.click()
+    downloadLink.remove()
+    URL.revokeObjectURL(downloadUrl)
   }
 
   useEffect(() => {
@@ -1865,23 +1867,105 @@ function App() {
                     <p className="report-editor-empty">Choose a report from the menu to edit its Markdown content.</p>
                   ) : null}
                   {selectedAnalyzerReport && !isLoadingAnalyzerReportContent && !analyzerReportContentError ? (
-                    <TextArea
-                      className="report-markdown-editor"
-                      id="report-markdown-editor"
-                      aria-label="Markdown report editor"
-                      value={analyzerReportContent}
-                      onChange={(_event, value) => {
-                        setAnalyzerReportContent(value)
-                        setReportSaveStatus(
-                          lastSavedReport.current?.fileName === selectedAnalyzerReport.name
-                          && lastSavedReport.current.content === value
-                            ? 'saved'
-                            : 'pending',
-                        )
-                        setReportSaveError(null)
-                      }}
-                      resizeOrientation="vertical"
-                    />
+                    <>
+                      <TextArea
+                        className="report-markdown-editor"
+                        id="report-markdown-editor"
+                        aria-label="Markdown report editor"
+                        value={analyzerReportContent}
+                        onChange={(_event, value) => {
+                          setAnalyzerReportContent(value)
+                          setReportSaveStatus(
+                            lastSavedReport.current?.fileName === selectedAnalyzerReport.name
+                            && lastSavedReport.current.content === value
+                              ? 'saved'
+                              : 'pending',
+                          )
+                          setReportSaveError(null)
+                        }}
+                        resizeOrientation="vertical"
+                      />
+
+                      <section className="report-version-panel" aria-label="Document version control">
+                        <div className="report-version-panel__heading">
+                          <Title headingLevel="h4" size="md">Document version control</Title>
+                        </div>
+                        {reportPdfValidationError ? (
+                          <Alert isInline variant="warning" title={reportPdfValidationError} />
+                        ) : null}
+                        {reportPdfError ? (
+                          <Alert isInline variant="danger" title="Could not export the report as PDF">
+                            {reportPdfError}
+                          </Alert>
+                        ) : null}
+                        <Form className="report-version-form">
+                          <FormGroup label="Customer" isRequired fieldId="pdf-customer">
+                            <TextInput
+                              id="pdf-customer"
+                              value={pdfExportParams.customer}
+                              onChange={(_event, value) => updatePdfExportParam('customer', value)}
+                            />
+                          </FormGroup>
+                          <FormGroup label="Description" isRequired fieldId="pdf-description">
+                            <TextArea
+                              id="pdf-description"
+                              value={pdfExportParams.description}
+                              onChange={(_event, value) => updatePdfExportParam('description', value)}
+                              resizeOrientation="vertical"
+                            />
+                          </FormGroup>
+                          <FormGroup label="Version" isRequired fieldId="pdf-version">
+                            <TextInput
+                              id="pdf-version"
+                              value={pdfExportParams.version}
+                              onChange={(_event, value) => updatePdfExportParam('version', value)}
+                            />
+                          </FormGroup>
+                          <FormGroup label="Status" isRequired fieldId="pdf-status">
+                            <TextInput
+                              id="pdf-status"
+                              value={pdfExportParams.status}
+                              onChange={(_event, value) => updatePdfExportParam('status', value)}
+                            />
+                          </FormGroup>
+                          <FormGroup label="Author" isRequired fieldId="pdf-author">
+                            <TextInput
+                              id="pdf-author"
+                              value={pdfExportParams.author}
+                              onChange={(_event, value) => updatePdfExportParam('author', value)}
+                            />
+                          </FormGroup>
+                          <FormGroup label="Project manager" isRequired fieldId="pdf-project-manager">
+                            <TextInput
+                              id="pdf-project-manager"
+                              value={pdfExportParams.projectManager}
+                              onChange={(_event, value) => updatePdfExportParam('projectManager', value)}
+                            />
+                          </FormGroup>
+                        </Form>
+                        <div className="report-version-panel__actions">
+                          <Button
+                            type="button"
+                            variant="primary"
+                            icon={<FilePdfIcon />}
+                            onClick={() => void exportSelectedReportPdf(pdfExportParams)}
+                            isLoading={isExportingReportPdf}
+                            isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
+                          >
+                            Export PDF
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            icon={<DownloadIcon />}
+                            onClick={downloadSelectedReportMarkdown}
+                            isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      </section>
+                    </>
                   ) : null}
                 </section>
               </div>
@@ -1898,101 +1982,10 @@ function App() {
               labelId="report-preview-modal-title"
             />
             <ModalBody id="report-preview-modal-description">
-              {reportPdfError ? (
-                <Alert isInline variant="danger" title="Could not export the report as PDF">
-                  {reportPdfError}
-                </Alert>
-              ) : null}
               <MarkdownViewer content={analyzerReportContent} />
             </ModalBody>
             <ModalFooter>
-              <Button
-                type="button"
-                variant="primary"
-                icon={<FilePdfIcon />}
-                onClick={openReportPdfModal}
-                isLoading={isExportingReportPdf}
-                isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
-              >
-                Export PDF
-              </Button>
               <Button variant="link" onClick={() => setIsReportPreviewOpen(false)}>Close</Button>
-            </ModalFooter>
-          </Modal>
-          <Modal
-            variant={ModalVariant.medium}
-            isOpen={isReportPdfModalOpen}
-            onClose={() => setIsReportPdfModalOpen(false)}
-          >
-            <ModalHeader title="PDF parameters" labelId="report-pdf-parameters-modal-title" />
-            <ModalBody id="report-pdf-parameters-modal-description">
-              {reportPdfValidationError ? (
-                <Alert isInline variant="warning" title={reportPdfValidationError} />
-              ) : null}
-              {reportPdfError ? (
-                <Alert isInline variant="danger" title="Could not export the report as PDF">
-                  {reportPdfError}
-                </Alert>
-              ) : null}
-              <Form>
-                <FormGroup label="Customer" isRequired fieldId="pdf-customer">
-                  <TextInput
-                    id="pdf-customer"
-                    value={pdfExportParams.customer}
-                    onChange={(_event, value) => updatePdfExportParam('customer', value)}
-                  />
-                </FormGroup>
-                <FormGroup label="Description" isRequired fieldId="pdf-description">
-                  <TextArea
-                    id="pdf-description"
-                    value={pdfExportParams.description}
-                    onChange={(_event, value) => updatePdfExportParam('description', value)}
-                    resizeOrientation="vertical"
-                  />
-                </FormGroup>
-                <FormGroup label="Version" isRequired fieldId="pdf-version">
-                  <TextInput
-                    id="pdf-version"
-                    value={pdfExportParams.version}
-                    onChange={(_event, value) => updatePdfExportParam('version', value)}
-                  />
-                </FormGroup>
-                <FormGroup label="Status" isRequired fieldId="pdf-status">
-                  <TextInput
-                    id="pdf-status"
-                    value={pdfExportParams.status}
-                    onChange={(_event, value) => updatePdfExportParam('status', value)}
-                  />
-                </FormGroup>
-                <FormGroup label="Author" isRequired fieldId="pdf-author">
-                  <TextInput
-                    id="pdf-author"
-                    value={pdfExportParams.author}
-                    onChange={(_event, value) => updatePdfExportParam('author', value)}
-                  />
-                </FormGroup>
-                <FormGroup label="Project manager" isRequired fieldId="pdf-project-manager">
-                  <TextInput
-                    id="pdf-project-manager"
-                    value={pdfExportParams.projectManager}
-                    onChange={(_event, value) => updatePdfExportParam('projectManager', value)}
-                  />
-                </FormGroup>
-              </Form>
-            </ModalBody>
-            <ModalFooter>
-              <Button
-                type="button"
-                variant="primary"
-                icon={<FilePdfIcon />}
-                onClick={() => void exportSelectedReportPdf(pdfExportParams)}
-                isLoading={isExportingReportPdf}
-              >
-                Generate PDF
-              </Button>
-              <Button variant="link" onClick={() => setIsReportPdfModalOpen(false)} isDisabled={isExportingReportPdf}>
-                Cancel
-              </Button>
             </ModalFooter>
           </Modal>
           <Modal
