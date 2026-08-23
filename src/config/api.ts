@@ -1,5 +1,5 @@
 // Proxy prefixes only: real upstream URLs are resolved by the Vite dev proxy or by server.mjs.
-export type ApiService = 'harvester' | 'analyzer' | 'core-ai'
+export type ApiService = 'harvester' | 'analyzer' | 'core-ai' | 'settings'
 
 export function getApiPath(service: ApiService, path: string): string {
   if (__DEVELOPMENT_MODE__) {
@@ -20,3 +20,7 @@ export const CORE_AI_API_PATH = '/api/core-ai'
 export const CORE_AI_ANALYSIS_PATH = `${CORE_AI_API_PATH}/analysis`
 export const CORE_AI_REPORT_STATUS_PATH = '/api/reports'
 export const CORE_AI_REQUEST_TIMEOUT_MS = 120_000
+
+export const SETTINGS_API_PATH = '/api/settings'
+export const SYSTEM_SETTINGS_PATH = `${SETTINGS_API_PATH}/system-settings`
+export const SYSTEM_SETTINGS_STATUS_PATH = `${SYSTEM_SETTINGS_PATH}/status`

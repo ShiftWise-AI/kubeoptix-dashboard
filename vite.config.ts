@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
   const analyzerApiUrl = env.ANALYZER_API_URL ?? 'http://analyzer-api:8000'
   const reporterApiUrl = env.REPORTER_API_URL ?? 'https://reporter-shiftwise-ai.apps-crc.testing'
   const coreAiApiUrl = env.CORE_AI_API_URL ?? 'http://core-ai-api:8000'
+  const settingsApiUrl = env.SETTINGS_API_URL ?? 'http://localhost:8000'
 
   return {
     plugins: [react()],
@@ -55,6 +56,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path.replace(/^\/api\/reports/, '/api/reports'),
+        },
+        '/api/settings': {
+          target: settingsApiUrl,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/api\/settings/, ''),
         },
       },
     },
