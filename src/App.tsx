@@ -41,7 +41,10 @@ import {
 import type { TreeViewDataItem } from '@patternfly/react-core'
 import { ChartLineIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
 import MarkdownViewer from './MarkdownViewer'
+import ConfigurationsPage from './ConfigurationsPage'
 import dashboardLogo from '../image/logo.png'
+import { fetchSystemSettingsExists } from './services/settingsService'
+import type { SystemSettings } from './services/settingsService'
 import {
   ANALYZER_ASSESSMENT_NAMESPACES_PATH,
   ANALYZER_CLEANUP_PATH,
@@ -53,7 +56,7 @@ import {
 import { ApiRequestError, executeRequest } from './services/httpClient'
 import { runAnalysis, type AnalysisMode } from './services/analysisService'
 
-type MenuKey = 'harvester' | 'analyzer' | 'reports'
+type MenuKey = 'harvester' | 'analyzer' | 'reports' | 'configurations'
 type ColorScheme = 'system' | 'dark'
 type ReportSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
@@ -380,6 +383,7 @@ function App() {
     window.matchMedia('(prefers-color-scheme: dark)').matches
   ))
   const [activeMenu, setActiveMenu] = useState<MenuKey>('harvester')
+  const [isSystemConfigured, setIsSystemConfigured] = useState<boolean | null>(null)
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([])
   const [selectedNamespaces, setSelectedNamespaces] = useState<string[]>([])
   const [namespaceFilter, setNamespaceFilter] = useState('')
@@ -527,6 +531,25 @@ function App() {
   useEffect(() => {
     void loadNamespaces()
   }, [])
+
+  useEffect(() => {
+    // The dashboard cannot be used until the system settings record is created at least once.
+    void (async () => {
+      try {
+        const exists = await fetchSystemSettingsExists()
+        setIsSystemConfigured(exists)
+        if (!exists) {
+          setActiveMenu('configurations')
+        }
+      } catch {
+        setIsSystemConfigured(null)
+      }
+    })()
+  }, [])
+
+  function handleSettingsChange(settings: SystemSettings | null) {
+    setIsSystemConfigured(settings !== null)
+  }
 
   async function loadAnalyzerNamespaces() {
     setIsLoadingAnalyzerNamespaces(true)
@@ -1238,19 +1261,36 @@ function App() {
     <PageSidebar className="pf-v5-c-page__sidebar">
       <Nav aria-label="Service sections">
         <NavList>
-          <NavItem itemId="harvester" isActive={activeMenu === 'harvester'} disabled={isCollectionInProgress} onClick={() => setActiveMenu('harvester')}>
+          <NavItem
+            itemId="harvester"
+            isActive={activeMenu === 'harvester'}
+            disabled={isCollectionInProgress || isSystemConfigured === false}
+            onClick={() => setActiveMenu('harvester')}
+          >
             Harvester
           </NavItem>
-          <NavItem itemId="analyzer" isActive={activeMenu === 'analyzer'} disabled={isCollectionInProgress} onClick={() => setActiveMenu('analyzer')}>
+          <NavItem
+            itemId="analyzer"
+            isActive={activeMenu === 'analyzer'}
+            disabled={isCollectionInProgress || isSystemConfigured === false}
+            onClick={() => setActiveMenu('analyzer')}
+          >
             Analyzer
           </NavItem>
           <NavItem
             itemId="reports"
             isActive={activeMenu === 'reports'}
-            disabled={isCollectionInProgress || isAnalyzerInProgress}
+            disabled={isCollectionInProgress || isAnalyzerInProgress || isSystemConfigured === false}
             onClick={openAnalyzerReports}
           >
             Reports
+          </NavItem>
+          <NavItem
+            itemId="configurations"
+            isActive={activeMenu === 'configurations'}
+            onClick={() => setActiveMenu('configurations')}
+          >
+            Configurations
           </NavItem>
         </NavList>
       </Nav>
@@ -1301,6 +1341,7 @@ function App() {
             type="button"
             className={`workflow-step${activeMenu === 'harvester' ? ' is-active' : ''}${collectionCompleted ? ' is-complete' : ''}`}
             onClick={() => setActiveMenu('harvester')}
+            disabled={isSystemConfigured === false}
           >
             <span className="workflow-step-number">1</span>
             <span>
@@ -1313,7 +1354,7 @@ function App() {
             type="button"
             className={`workflow-step${activeMenu === 'analyzer' ? ' is-active' : ''}${analysisCompleted ? ' is-complete' : ''}`}
             onClick={() => setActiveMenu('analyzer')}
-            disabled={isCollectionInProgress || (!collectionCompleted && availableAnalyzerNamespaces.length === 0)}
+            disabled={isSystemConfigured === false || isCollectionInProgress || (!collectionCompleted && availableAnalyzerNamespaces.length === 0)}
           >
             <span className="workflow-step-number">2</span>
             <span>
@@ -1326,7 +1367,7 @@ function App() {
             type="button"
             className={`workflow-step${activeMenu === 'reports' ? ' is-active' : ''}`}
             onClick={openAnalyzerReports}
-            disabled={isCollectionInProgress || isAnalyzerInProgress || (!analysisCompleted && analyzerReports.length === 0)}
+            disabled={isSystemConfigured === false || isCollectionInProgress || isAnalyzerInProgress || (!analysisCompleted && analyzerReports.length === 0)}
           >
             <span className="workflow-step-number">3</span>
             <span>
@@ -1516,6 +1557,8 @@ function App() {
           </Modal>
 
         </>
+      ) : activeMenu === 'configurations' ? (
+        <ConfigurationsPage onSettingsChange={handleSettingsChange} />
       ) : activeMenu === 'analyzer' ? (
         <>
           <PageSection>

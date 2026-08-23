@@ -20,7 +20,7 @@ export type RequestOptions = {
 }
 
 export async function executeRequest(
-  method: 'GET' | 'POST' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body?: Record<string, unknown>,
   options?: RequestOptions,
