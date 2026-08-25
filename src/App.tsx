@@ -11,6 +11,8 @@ import {
   FlexItem,
   Form,
   FormGroup,
+  FormSelect,
+  FormSelectOption,
   Masthead,
   MastheadBrand,
   MastheadContent,
@@ -42,6 +44,7 @@ import type { TreeViewDataItem } from '@patternfly/react-core'
 import { ChartLineIcon, DownloadIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
 import MarkdownViewer from './MarkdownViewer'
 import ConfigurationsPage from './ConfigurationsPage'
+import DocumentDependenciesPage from './DocumentDependenciesPage'
 import dashboardLogo from '../image/logo.png'
 import { fetchSystemSettings } from './services/settingsService'
 import type { SystemSettings } from './services/settingsService'
@@ -55,9 +58,13 @@ import {
 } from './config/api'
 import { ApiRequestError, executeRequest } from './services/httpClient'
 import { runAnalysis, type AnalysisMode } from './services/analysisService'
-import { fetchReportMetadataOptions } from './services/documentVersionService'
+import {
+  fetchReportMetadataOptions,
+  saveDocumentVersion,
+  type Person,
+} from './services/documentVersionService'
 
-type MenuKey = 'harvester' | 'analyzer' | 'reports' | 'configurations'
+type MenuKey = 'harvester' | 'analyzer' | 'reports' | 'configurations' | 'document-control'
 type ColorScheme = 'system' | 'dark'
 type ReportSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
@@ -74,18 +81,25 @@ type AnalyzerReportFile = {
 }
 
 type PdfExportParams = {
+  costumer: string
+  costumersListId: string
+  description: string
+  version: string
+  authorId: string
+  projectManager: string
+}
+
+type ReporterPdfParams = {
   customer: string
   description: string
   version: string
-  status: string
   author: string
   projectManager: string
 }
 
 type ReportMetadataState = {
-  customers: string[]
-  authors: string[]
-  versions: string[]
+  customers: Person[]
+  authors: Person[]
 }
 
 const MESSAGE_DISMISS_DELAY_MS = 15_000
@@ -115,7 +129,7 @@ function getReporterReportPath(fileName: string): string {
   return `${REPORTER_API_PATH}/report/${encodeURIComponent(fileName)}`
 }
 
-function getReporterReportPdfPath(fileName: string, params?: PdfExportParams): string {
+function getReporterReportPdfPath(fileName: string, params?: ReporterPdfParams): string {
   const path = `${getReporterReportPath(fileName)}/pdf`
 
   if (!params) {
@@ -126,7 +140,7 @@ function getReporterReportPdfPath(fileName: string, params?: PdfExportParams): s
     customer: params.customer,
     description: params.description,
     version: params.version,
-    status: params.status,
+    status: 'Draft',
     author: params.author,
   })
   queryParams.set('project-manager', params.projectManager)
@@ -136,20 +150,23 @@ function getReporterReportPdfPath(fileName: string, params?: PdfExportParams): s
 
 function createInitialPdfExportParams(): PdfExportParams {
   return {
-    customer: '',
+    costumer: '',
+    costumersListId: '',
     description: '',
     version: '',
-    status: '',
-    author: '',
+    authorId: '',
     projectManager: '',
   }
+}
+
+function getPersonName(people: Person[], id: string): string {
+  return people.find((person) => person.id === id)?.name ?? ''
 }
 
 function createInitialReportMetadataState(): ReportMetadataState {
   return {
     customers: [],
     authors: [],
-    versions: [],
   }
 }
 
@@ -364,7 +381,7 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
   }
 }
 
-async function fetchReportPdf(fileName: string, params: PdfExportParams): Promise<Blob> {
+async function fetchReportPdf(fileName: string, params: ReporterPdfParams): Promise<Blob> {
   const response = await fetch(getReporterReportPdfPath(fileName, params), {
     method: 'GET',
     headers: { Accept: 'application/pdf' },
@@ -768,21 +785,15 @@ function App() {
       setReportMetadataOptions({
         customers: metadata.customers,
         authors: metadata.authors,
-        versions: metadata.versions,
       })
 
       setPdfExportParams((previousValue) => ({
         ...previousValue,
-        customer: previousValue.customer || metadata.customers[0] || '',
-        author: previousValue.author || metadata.authors[0] || '',
-        version: previousValue.version || metadata.versions[0] || '',
+        costumer: previousValue.costumer || metadata.customers[0]?.name || '',
+        costumersListId: previousValue.costumersListId || metadata.customers[0]?.id || '',
+        authorId: previousValue.authorId || metadata.authors[0]?.id || '',
       }))
-
-      if (metadata.warnings.length > 0) {
-        setReportMetadataOptionsError(metadata.warnings.join(' '))
-      } else {
-        setReportMetadataOptionsError(null)
-      }
+      setReportMetadataOptionsError(null)
     } catch (error) {
       setReportMetadataOptions(createInitialReportMetadataState())
       setReportMetadataOptionsError(
@@ -801,15 +812,20 @@ function App() {
     }
 
     const normalizedParams: PdfExportParams = {
-      customer: params.customer.trim(),
+      costumer: params.costumer.trim(),
+      costumersListId: params.costumersListId,
       description: params.description.trim(),
       version: params.version.trim(),
-      status: params.status.trim(),
-      author: params.author.trim(),
+      authorId: params.authorId,
       projectManager: params.projectManager.trim(),
     }
 
-    const hasEmptyRequiredField = Object.values(normalizedParams).some((value) => value.length === 0)
+    const hasEmptyRequiredField = !normalizedParams.costumer
+      || !normalizedParams.costumersListId
+      || !normalizedParams.description
+      || !normalizedParams.version
+      || !normalizedParams.authorId
+      || !normalizedParams.projectManager
     if (hasEmptyRequiredField) {
       setReportPdfValidationError('All PDF parameters are required.')
       return
@@ -820,7 +836,22 @@ function App() {
     setReportPdfValidationError(null)
 
     try {
-      const pdf = await fetchReportPdf(selectedAnalyzerReport.name, normalizedParams)
+      await saveDocumentVersion({
+        title: normalizedParams.description,
+        projectManager: normalizedParams.projectManager,
+        costumer: normalizedParams.costumer,
+        costumersListId: normalizedParams.costumersListId,
+        authorId: normalizedParams.authorId,
+        versionNumber: normalizedParams.version,
+        markdownContent: analyzerReportContent,
+      })
+      const pdf = await fetchReportPdf(selectedAnalyzerReport.name, {
+        customer: normalizedParams.costumer,
+        description: normalizedParams.description,
+        version: normalizedParams.version,
+        author: getPersonName(reportMetadataOptions.authors, normalizedParams.authorId),
+        projectManager: normalizedParams.projectManager,
+      })
       const downloadUrl = URL.createObjectURL(pdf)
       const downloadLink = document.createElement('a')
       downloadLink.href = downloadUrl
@@ -839,7 +870,12 @@ function App() {
   function openReportVersionModal() {
     setReportPdfError(null)
     setReportPdfValidationError(null)
+    setPdfExportParams((previousValue) => ({
+      ...previousValue,
+      description: previousValue.description || selectedAnalyzerReport?.name.replace(/\.md$/i, '') || '',
+    }))
     setIsReportVersionModalOpen(true)
+    void loadReportMetadataOptions()
   }
 
   function downloadSelectedReportMarkdown() {
@@ -1367,6 +1403,14 @@ function App() {
           >
             Configurations
           </NavItem>
+          <NavItem
+            itemId="document-control"
+            isActive={activeMenu === 'document-control'}
+            disabled={isSystemConfigured === false}
+            onClick={() => setActiveMenu('document-control')}
+          >
+            Document control
+          </NavItem>
         </NavList>
       </Nav>
     </PageSidebar>
@@ -1634,6 +1678,8 @@ function App() {
         </>
       ) : activeMenu === 'configurations' ? (
         <ConfigurationsPage onSettingsChange={handleSettingsChange} />
+      ) : activeMenu === 'document-control' ? (
+        <DocumentDependenciesPage />
       ) : activeMenu === 'analyzer' ? (
         <>
           <PageSection>
@@ -1959,15 +2005,18 @@ function App() {
                         resizeOrientation="vertical"
                       />
 
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        icon={<DownloadIcon />}
-                        onClick={downloadSelectedReportMarkdown}
-                        isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
-                      >
-                        Download
-                      </Button>
+                      <div className="report-download-actions">
+                        <Button
+                          type="button"
+                          variant="primary"
+                          className="report-download-button"
+                          icon={<DownloadIcon />}
+                          onClick={downloadSelectedReportMarkdown}
+                          isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
+                        >
+                          Download
+                        </Button>
+                      </div>
                     </>
                   ) : null}
                 </section>
@@ -2031,20 +2080,26 @@ function App() {
                 </Alert>
               ) : null}
               <Form className="report-version-form">
-                <FormGroup label="Customer" isRequired fieldId="pdf-customer">
+                <FormGroup label="Costumer" isRequired fieldId="pdf-costumer">
                   <TextInput
-                    id="pdf-customer"
-                    list="pdf-customer-options"
-                    value={pdfExportParams.customer}
-                    onChange={(_event, value) => updatePdfExportParam('customer', value)}
+                    id="pdf-costumer"
+                    value={pdfExportParams.costumer}
+                    onChange={(_event, value) => updatePdfExportParam('costumer', value)}
                   />
-                  <datalist id="pdf-customer-options">
-                    {reportMetadataOptions.customers.map((option) => (
-                      <option key={`customer-${option}`} value={option} />
-                    ))}
-                  </datalist>
                 </FormGroup>
-                <FormGroup label="Description" isRequired fieldId="pdf-description">
+                <FormGroup label="Costumers list" isRequired fieldId="pdf-costumers-list">
+                  <FormSelect
+                    id="pdf-costumers-list"
+                    value={pdfExportParams.costumersListId}
+                    onChange={(_event, value) => updatePdfExportParam('costumersListId', value)}
+                  >
+                    <FormSelectOption value="" label="Select a customer" isPlaceholder />
+                    {reportMetadataOptions.customers.map((option) => (
+                      <FormSelectOption key={option.id} value={option.id} label={option.name} />
+                    ))}
+                  </FormSelect>
+                </FormGroup>
+                <FormGroup label="Document title" isRequired fieldId="pdf-description">
                   <TextArea
                     id="pdf-description"
                     value={pdfExportParams.description}
@@ -2055,35 +2110,21 @@ function App() {
                 <FormGroup label="Version" isRequired fieldId="pdf-version">
                   <TextInput
                     id="pdf-version"
-                    list="pdf-version-options"
                     value={pdfExportParams.version}
                     onChange={(_event, value) => updatePdfExportParam('version', value)}
                   />
-                  <datalist id="pdf-version-options">
-                    {reportMetadataOptions.versions.map((option) => (
-                      <option key={`version-${option}`} value={option} />
-                    ))}
-                  </datalist>
-                </FormGroup>
-                <FormGroup label="Status" isRequired fieldId="pdf-status">
-                  <TextInput
-                    id="pdf-status"
-                    value={pdfExportParams.status}
-                    onChange={(_event, value) => updatePdfExportParam('status', value)}
-                  />
                 </FormGroup>
                 <FormGroup label="Author" isRequired fieldId="pdf-author">
-                  <TextInput
+                  <FormSelect
                     id="pdf-author"
-                    list="pdf-author-options"
-                    value={pdfExportParams.author}
-                    onChange={(_event, value) => updatePdfExportParam('author', value)}
-                  />
-                  <datalist id="pdf-author-options">
+                    value={pdfExportParams.authorId}
+                    onChange={(_event, value) => updatePdfExportParam('authorId', value)}
+                  >
+                    <FormSelectOption value="" label="Select an author" isPlaceholder />
                     {reportMetadataOptions.authors.map((option) => (
-                      <option key={`author-${option}`} value={option} />
+                      <FormSelectOption key={option.id} value={option.id} label={option.name} />
                     ))}
-                  </datalist>
+                  </FormSelect>
                 </FormGroup>
                 <FormGroup label="Project manager" isRequired fieldId="pdf-project-manager">
                   <TextInput

@@ -259,6 +259,21 @@ body {
   gap: 1rem;
 }
 
+.dependency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.dependency-list {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.dependency-list li + li {
+  margin-top: 0.5rem;
+}
+
 .reports-workspace {
   display: grid;
   grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
@@ -324,6 +339,22 @@ body {
   font-family: var(--pf-t--global--font--family--mono);
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.report-download-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.report-download-button {
+  width: fit-content;
+  background-color: var(--pf-t--global--color--status--success--default);
+  border-color: var(--pf-t--global--color--status--success--default);
+}
+
+.report-download-button:hover:not(:disabled) {
+  background-color: var(--pf-t--global--color--status--success--hover);
+  border-color: var(--pf-t--global--color--status--success--hover);
 }
 
 .report-version-panel {
