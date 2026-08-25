@@ -265,6 +265,35 @@ body {
   gap: 1rem;
 }
 
+.document-control-card {
+  margin-bottom: 1rem;
+}
+
+.document-control-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.document-control-form .pf-v6-c-form__group {
+  margin-bottom: 0;
+}
+
+.document-control-form__markdown,
+.document-control-form__actions {
+  grid-column: 1 / -1;
+}
+
+.document-control-form__markdown textarea {
+  min-height: 16rem;
+  font-family: var(--pf-t--global--font--family--mono);
+}
+
+.document-control-form__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .dependency-list {
   margin: 0;
   padding-inline-start: 1.25rem;
