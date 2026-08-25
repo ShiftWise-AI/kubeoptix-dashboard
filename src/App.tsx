@@ -435,6 +435,7 @@ function App() {
   const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
   const reportLoadSequence = useRef(0)
   const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
+  const [isReportVersionModalOpen, setIsReportVersionModalOpen] = useState(false)
   const [reportPendingOpen, setReportPendingOpen] = useState<AnalyzerReportFile | null>(null)
   const [assessmentTree, setAssessmentTree] = useState<TreeViewDataItem[]>([])
   const [isLoadingAssessmentTree, setIsLoadingAssessmentTree] = useState(false)
@@ -749,6 +750,7 @@ function App() {
     setReportPdfError(null)
     setReportPdfValidationError(null)
     setIsReportPreviewOpen(false)
+    setIsReportVersionModalOpen(false)
   }
 
   function updatePdfExportParam(field: keyof PdfExportParams, value: string) {
@@ -832,6 +834,12 @@ function App() {
     } finally {
       setIsExportingReportPdf(false)
     }
+  }
+
+  function openReportVersionModal() {
+    setReportPdfError(null)
+    setReportPdfValidationError(null)
+    setIsReportVersionModalOpen(true)
   }
 
   function downloadSelectedReportMarkdown() {
@@ -1951,117 +1959,15 @@ function App() {
                         resizeOrientation="vertical"
                       />
 
-                      <section className="report-version-panel" aria-label="Document version control">
-                        <div className="report-version-panel__heading">
-                          <Title headingLevel="h4" size="md">Document version control</Title>
-                          <Button
-                            type="button"
-                            variant="link"
-                            isInline
-                            onClick={() => void loadReportMetadataOptions()}
-                            isLoading={isLoadingReportMetadataOptions}
-                          >
-                            {isLoadingReportMetadataOptions ? 'Syncing options...' : 'Sync API options'}
-                          </Button>
-                        </div>
-                        {reportPdfValidationError ? (
-                          <Alert isInline variant="warning" title={reportPdfValidationError} />
-                        ) : null}
-                        {reportPdfError ? (
-                          <Alert isInline variant="danger" title="Could not export the report as PDF">
-                            {reportPdfError}
-                          </Alert>
-                        ) : null}
-                        {reportMetadataOptionsError ? (
-                          <Alert isInline variant="warning" title="Could not fully load API options">
-                            {reportMetadataOptionsError}
-                          </Alert>
-                        ) : null}
-                        <Form className="report-version-form">
-                          <FormGroup label="Customer" isRequired fieldId="pdf-customer">
-                            <TextInput
-                              id="pdf-customer"
-                              list="pdf-customer-options"
-                              value={pdfExportParams.customer}
-                              onChange={(_event, value) => updatePdfExportParam('customer', value)}
-                            />
-                            <datalist id="pdf-customer-options">
-                              {reportMetadataOptions.customers.map((option) => (
-                                <option key={`customer-${option}`} value={option} />
-                              ))}
-                            </datalist>
-                          </FormGroup>
-                          <FormGroup label="Description" isRequired fieldId="pdf-description">
-                            <TextArea
-                              id="pdf-description"
-                              value={pdfExportParams.description}
-                              onChange={(_event, value) => updatePdfExportParam('description', value)}
-                              resizeOrientation="vertical"
-                            />
-                          </FormGroup>
-                          <FormGroup label="Version" isRequired fieldId="pdf-version">
-                            <TextInput
-                              id="pdf-version"
-                              list="pdf-version-options"
-                              value={pdfExportParams.version}
-                              onChange={(_event, value) => updatePdfExportParam('version', value)}
-                            />
-                            <datalist id="pdf-version-options">
-                              {reportMetadataOptions.versions.map((option) => (
-                                <option key={`version-${option}`} value={option} />
-                              ))}
-                            </datalist>
-                          </FormGroup>
-                          <FormGroup label="Status" isRequired fieldId="pdf-status">
-                            <TextInput
-                              id="pdf-status"
-                              value={pdfExportParams.status}
-                              onChange={(_event, value) => updatePdfExportParam('status', value)}
-                            />
-                          </FormGroup>
-                          <FormGroup label="Author" isRequired fieldId="pdf-author">
-                            <TextInput
-                              id="pdf-author"
-                              list="pdf-author-options"
-                              value={pdfExportParams.author}
-                              onChange={(_event, value) => updatePdfExportParam('author', value)}
-                            />
-                            <datalist id="pdf-author-options">
-                              {reportMetadataOptions.authors.map((option) => (
-                                <option key={`author-${option}`} value={option} />
-                              ))}
-                            </datalist>
-                          </FormGroup>
-                          <FormGroup label="Project manager" isRequired fieldId="pdf-project-manager">
-                            <TextInput
-                              id="pdf-project-manager"
-                              value={pdfExportParams.projectManager}
-                              onChange={(_event, value) => updatePdfExportParam('projectManager', value)}
-                            />
-                          </FormGroup>
-                        </Form>
-                        <div className="report-version-panel__actions">
-                          <Button
-                            type="button"
-                            variant="primary"
-                            icon={<FilePdfIcon />}
-                            onClick={() => void exportSelectedReportPdf(pdfExportParams)}
-                            isLoading={isExportingReportPdf}
-                            isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
-                          >
-                            Export PDF
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            icon={<DownloadIcon />}
-                            onClick={downloadSelectedReportMarkdown}
-                            isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
-                          >
-                            Download
-                          </Button>
-                        </div>
-                      </section>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        icon={<DownloadIcon />}
+                        onClick={downloadSelectedReportMarkdown}
+                        isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
+                      >
+                        Download
+                      </Button>
                     </>
                   ) : null}
                 </section>
@@ -2082,7 +1988,123 @@ function App() {
               <MarkdownViewer content={analyzerReportContent} />
             </ModalBody>
             <ModalFooter>
+              <Button
+                variant="primary"
+                icon={<FilePdfIcon />}
+                onClick={openReportVersionModal}
+                isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
+              >
+                Export PDF
+              </Button>
               <Button variant="link" onClick={() => setIsReportPreviewOpen(false)}>Close</Button>
+            </ModalFooter>
+          </Modal>
+          <Modal
+            variant={ModalVariant.medium}
+            isOpen={isReportVersionModalOpen}
+            onClose={() => setIsReportVersionModalOpen(false)}
+          >
+            <ModalHeader title="Document version control" labelId="report-version-modal-title" />
+            <ModalBody id="report-version-modal-description">
+              <div className="report-version-panel__heading">
+                <Button
+                  type="button"
+                  variant="link"
+                  isInline
+                  onClick={() => void loadReportMetadataOptions()}
+                  isLoading={isLoadingReportMetadataOptions}
+                >
+                  {isLoadingReportMetadataOptions ? 'Syncing options...' : 'Sync API options'}
+                </Button>
+              </div>
+              {reportPdfValidationError ? (
+                <Alert isInline variant="warning" title={reportPdfValidationError} />
+              ) : null}
+              {reportPdfError ? (
+                <Alert isInline variant="danger" title="Could not export the report as PDF">
+                  {reportPdfError}
+                </Alert>
+              ) : null}
+              {reportMetadataOptionsError ? (
+                <Alert isInline variant="warning" title="Could not fully load API options">
+                  {reportMetadataOptionsError}
+                </Alert>
+              ) : null}
+              <Form className="report-version-form">
+                <FormGroup label="Customer" isRequired fieldId="pdf-customer">
+                  <TextInput
+                    id="pdf-customer"
+                    list="pdf-customer-options"
+                    value={pdfExportParams.customer}
+                    onChange={(_event, value) => updatePdfExportParam('customer', value)}
+                  />
+                  <datalist id="pdf-customer-options">
+                    {reportMetadataOptions.customers.map((option) => (
+                      <option key={`customer-${option}`} value={option} />
+                    ))}
+                  </datalist>
+                </FormGroup>
+                <FormGroup label="Description" isRequired fieldId="pdf-description">
+                  <TextArea
+                    id="pdf-description"
+                    value={pdfExportParams.description}
+                    onChange={(_event, value) => updatePdfExportParam('description', value)}
+                    resizeOrientation="vertical"
+                  />
+                </FormGroup>
+                <FormGroup label="Version" isRequired fieldId="pdf-version">
+                  <TextInput
+                    id="pdf-version"
+                    list="pdf-version-options"
+                    value={pdfExportParams.version}
+                    onChange={(_event, value) => updatePdfExportParam('version', value)}
+                  />
+                  <datalist id="pdf-version-options">
+                    {reportMetadataOptions.versions.map((option) => (
+                      <option key={`version-${option}`} value={option} />
+                    ))}
+                  </datalist>
+                </FormGroup>
+                <FormGroup label="Status" isRequired fieldId="pdf-status">
+                  <TextInput
+                    id="pdf-status"
+                    value={pdfExportParams.status}
+                    onChange={(_event, value) => updatePdfExportParam('status', value)}
+                  />
+                </FormGroup>
+                <FormGroup label="Author" isRequired fieldId="pdf-author">
+                  <TextInput
+                    id="pdf-author"
+                    list="pdf-author-options"
+                    value={pdfExportParams.author}
+                    onChange={(_event, value) => updatePdfExportParam('author', value)}
+                  />
+                  <datalist id="pdf-author-options">
+                    {reportMetadataOptions.authors.map((option) => (
+                      <option key={`author-${option}`} value={option} />
+                    ))}
+                  </datalist>
+                </FormGroup>
+                <FormGroup label="Project manager" isRequired fieldId="pdf-project-manager">
+                  <TextInput
+                    id="pdf-project-manager"
+                    value={pdfExportParams.projectManager}
+                    onChange={(_event, value) => updatePdfExportParam('projectManager', value)}
+                  />
+                </FormGroup>
+              </Form>
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                variant="primary"
+                icon={<FilePdfIcon />}
+                onClick={() => void exportSelectedReportPdf(pdfExportParams)}
+                isLoading={isExportingReportPdf}
+                isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
+              >
+                Export PDF
+              </Button>
+              <Button variant="link" onClick={() => setIsReportVersionModalOpen(false)}>Cancel</Button>
             </ModalFooter>
           </Modal>
           <Modal
