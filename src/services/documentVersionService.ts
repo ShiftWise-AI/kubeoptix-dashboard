@@ -1,6 +1,6 @@
 import {
   SETTINGS_AUTHORS_PATH,
-  SETTINGS_CUSTOMERS_PATH,
+  SETTINGS_COSTUMERS_LIST_PATH,
   SETTINGS_DOCUMENT_VERSIONS_PATH,
   SETTINGS_VERSIONS_PATH,
 } from '../config/api'
@@ -71,14 +71,14 @@ async function fetchPeople(path: string): Promise<Person[]> {
 
 export async function fetchDocumentDependencies(): Promise<ReportMetadataOptions> {
   const [customers, authors] = await Promise.all([
-    fetchPeople(SETTINGS_CUSTOMERS_PATH),
+    fetchPeople(SETTINGS_COSTUMERS_LIST_PATH),
     fetchPeople(SETTINGS_AUTHORS_PATH),
   ])
   return { customers, authors }
 }
 
 export async function createPerson(kind: 'author' | 'customer', input: Omit<Person, 'id'>): Promise<void> {
-  await executeRequest('POST', kind === 'author' ? SETTINGS_AUTHORS_PATH : SETTINGS_CUSTOMERS_PATH, input)
+  await executeRequest('POST', kind === 'author' ? SETTINGS_AUTHORS_PATH : SETTINGS_COSTUMERS_LIST_PATH, input)
 }
 
 async function createVersion(versionNumber: string, markdownContent: string): Promise<string> {
@@ -116,7 +116,7 @@ async function createVersion(versionNumber: string, markdownContent: string): Pr
 
 export async function fetchReportMetadataOptions(): Promise<ReportMetadataOptions> {
   const [customers, authors] = await Promise.all([
-    fetchPeople(SETTINGS_CUSTOMERS_PATH),
+    fetchPeople(SETTINGS_COSTUMERS_LIST_PATH),
     fetchPeople(SETTINGS_AUTHORS_PATH),
   ])
 
