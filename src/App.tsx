@@ -43,7 +43,7 @@ import { ChartLineIcon, DownloadIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderI
 import MarkdownViewer from './MarkdownViewer'
 import ConfigurationsPage from './ConfigurationsPage'
 import dashboardLogo from '../image/logo.png'
-import { fetchSystemSettingsExists } from './services/settingsService'
+import { fetchSystemSettings } from './services/settingsService'
 import type { SystemSettings } from './services/settingsService'
 import {
   ANALYZER_ASSESSMENT_NAMESPACES_PATH,
@@ -55,6 +55,7 @@ import {
 } from './config/api'
 import { ApiRequestError, executeRequest } from './services/httpClient'
 import { runAnalysis, type AnalysisMode } from './services/analysisService'
+import { fetchReportMetadataOptions } from './services/documentVersionService'
 
 type MenuKey = 'harvester' | 'analyzer' | 'reports' | 'configurations'
 type ColorScheme = 'system' | 'dark'
@@ -79,6 +80,12 @@ type PdfExportParams = {
   status: string
   author: string
   projectManager: string
+}
+
+type ReportMetadataState = {
+  customers: string[]
+  authors: string[]
+  versions: string[]
 }
 
 const MESSAGE_DISMISS_DELAY_MS = 15_000
@@ -135,6 +142,14 @@ function createInitialPdfExportParams(): PdfExportParams {
     status: '',
     author: '',
     projectManager: '',
+  }
+}
+
+function createInitialReportMetadataState(): ReportMetadataState {
+  return {
+    customers: [],
+    authors: [],
+    versions: [],
   }
 }
 
@@ -412,6 +427,11 @@ function App() {
   const [reportPdfError, setReportPdfError] = useState<string | null>(null)
   const [pdfExportParams, setPdfExportParams] = useState<PdfExportParams>(createInitialPdfExportParams)
   const [reportPdfValidationError, setReportPdfValidationError] = useState<string | null>(null)
+  const [reportMetadataOptions, setReportMetadataOptions] = useState<ReportMetadataState>(
+    createInitialReportMetadataState,
+  )
+  const [isLoadingReportMetadataOptions, setIsLoadingReportMetadataOptions] = useState(false)
+  const [reportMetadataOptionsError, setReportMetadataOptionsError] = useState<string | null>(null)
   const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
   const reportLoadSequence = useRef(0)
   const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
@@ -454,6 +474,7 @@ function App() {
   useAutoDismissMessage(reportSaveError, () => setReportSaveError(null))
   useAutoDismissMessage(reportPdfError, () => setReportPdfError(null))
   useAutoDismissMessage(reportPdfValidationError, () => setReportPdfValidationError(null))
+  useAutoDismissMessage(reportMetadataOptionsError, () => setReportMetadataOptionsError(null))
   useAutoDismissMessage(assessmentTreeError, () => setAssessmentTreeError(null))
   useAutoDismissMessage(collectionStatusError, () => setCollectionStatusError(null))
   useAutoDismissMessage(analyzerStatusError, () => setAnalyzerStatusError(null))
@@ -535,11 +556,14 @@ function App() {
     // The dashboard cannot be used until the system settings record is created at least once.
     void (async () => {
       try {
-        const exists = await fetchSystemSettingsExists()
-        setIsSystemConfigured(exists)
-        if (!exists) {
+        const settings = await fetchSystemSettings()
+        setIsSystemConfigured(settings !== null)
+        if (!settings) {
           setActiveMenu('configurations')
+          return
         }
+
+        setMode(settings.defaultExtractionMethod === 'ml' ? 'predictive' : 'generative')
       } catch {
         setIsSystemConfigured(null)
       }
@@ -548,6 +572,9 @@ function App() {
 
   function handleSettingsChange(settings: SystemSettings | null) {
     setIsSystemConfigured(settings !== null)
+    if (settings) {
+      setMode(settings.defaultExtractionMethod === 'ml' ? 'predictive' : 'generative')
+    }
   }
 
   async function loadAnalyzerNamespaces() {
@@ -731,6 +758,41 @@ function App() {
     }))
   }
 
+  async function loadReportMetadataOptions() {
+    setIsLoadingReportMetadataOptions(true)
+
+    try {
+      const metadata = await fetchReportMetadataOptions()
+      setReportMetadataOptions({
+        customers: metadata.customers,
+        authors: metadata.authors,
+        versions: metadata.versions,
+      })
+
+      setPdfExportParams((previousValue) => ({
+        ...previousValue,
+        customer: previousValue.customer || metadata.customers[0] || '',
+        author: previousValue.author || metadata.authors[0] || '',
+        version: previousValue.version || metadata.versions[0] || '',
+      }))
+
+      if (metadata.warnings.length > 0) {
+        setReportMetadataOptionsError(metadata.warnings.join(' '))
+      } else {
+        setReportMetadataOptionsError(null)
+      }
+    } catch (error) {
+      setReportMetadataOptions(createInitialReportMetadataState())
+      setReportMetadataOptionsError(
+        error instanceof Error
+          ? error.message
+          : 'Could not load document version metadata from the API.',
+      )
+    } finally {
+      setIsLoadingReportMetadataOptions(false)
+    }
+  }
+
   async function exportSelectedReportPdf(params: PdfExportParams) {
     if (!selectedAnalyzerReport) {
       return
@@ -818,6 +880,9 @@ function App() {
       void loadAnalyzerNamespaces()
     } else {
       void loadAnalyzerReports()
+      if (activeMenu === 'reports') {
+        void loadReportMetadataOptions()
+      }
     }
   }, [activeMenu])
 
@@ -1678,7 +1743,7 @@ function App() {
                         <Radio
                           id="mode-predictive"
                           name="mode"
-                          label="Predictive AI"
+                          label="Machine Learning"
                           isChecked={mode === 'predictive'}
                           onChange={() => setMode('predictive')}
                         />
@@ -1687,7 +1752,7 @@ function App() {
                         <Radio
                           id="mode-generative"
                           name="mode"
-                          label="Generative AI"
+                          label="LLM"
                           isChecked={mode === 'generative'}
                           onChange={() => setMode('generative')}
                         />
@@ -1889,6 +1954,15 @@ function App() {
                       <section className="report-version-panel" aria-label="Document version control">
                         <div className="report-version-panel__heading">
                           <Title headingLevel="h4" size="md">Document version control</Title>
+                          <Button
+                            type="button"
+                            variant="link"
+                            isInline
+                            onClick={() => void loadReportMetadataOptions()}
+                            isLoading={isLoadingReportMetadataOptions}
+                          >
+                            {isLoadingReportMetadataOptions ? 'Syncing options...' : 'Sync API options'}
+                          </Button>
                         </div>
                         {reportPdfValidationError ? (
                           <Alert isInline variant="warning" title={reportPdfValidationError} />
@@ -1898,13 +1972,24 @@ function App() {
                             {reportPdfError}
                           </Alert>
                         ) : null}
+                        {reportMetadataOptionsError ? (
+                          <Alert isInline variant="warning" title="Could not fully load API options">
+                            {reportMetadataOptionsError}
+                          </Alert>
+                        ) : null}
                         <Form className="report-version-form">
                           <FormGroup label="Customer" isRequired fieldId="pdf-customer">
                             <TextInput
                               id="pdf-customer"
+                              list="pdf-customer-options"
                               value={pdfExportParams.customer}
                               onChange={(_event, value) => updatePdfExportParam('customer', value)}
                             />
+                            <datalist id="pdf-customer-options">
+                              {reportMetadataOptions.customers.map((option) => (
+                                <option key={`customer-${option}`} value={option} />
+                              ))}
+                            </datalist>
                           </FormGroup>
                           <FormGroup label="Description" isRequired fieldId="pdf-description">
                             <TextArea
@@ -1917,9 +2002,15 @@ function App() {
                           <FormGroup label="Version" isRequired fieldId="pdf-version">
                             <TextInput
                               id="pdf-version"
+                              list="pdf-version-options"
                               value={pdfExportParams.version}
                               onChange={(_event, value) => updatePdfExportParam('version', value)}
                             />
+                            <datalist id="pdf-version-options">
+                              {reportMetadataOptions.versions.map((option) => (
+                                <option key={`version-${option}`} value={option} />
+                              ))}
+                            </datalist>
                           </FormGroup>
                           <FormGroup label="Status" isRequired fieldId="pdf-status">
                             <TextInput
@@ -1931,9 +2022,15 @@ function App() {
                           <FormGroup label="Author" isRequired fieldId="pdf-author">
                             <TextInput
                               id="pdf-author"
+                              list="pdf-author-options"
                               value={pdfExportParams.author}
                               onChange={(_event, value) => updatePdfExportParam('author', value)}
                             />
+                            <datalist id="pdf-author-options">
+                              {reportMetadataOptions.authors.map((option) => (
+                                <option key={`author-${option}`} value={option} />
+                              ))}
+                            </datalist>
                           </FormGroup>
                           <FormGroup label="Project manager" isRequired fieldId="pdf-project-manager">
                             <TextInput
