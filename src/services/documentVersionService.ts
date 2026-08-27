@@ -81,6 +81,11 @@ export async function createPerson(kind: 'author' | 'customer', input: Omit<Pers
   await executeRequest('POST', kind === 'author' ? SETTINGS_AUTHORS_PATH : SETTINGS_COSTUMERS_LIST_PATH, input)
 }
 
+export async function deletePerson(kind: 'author' | 'customer', id: string): Promise<void> {
+  const path = kind === 'author' ? SETTINGS_AUTHORS_PATH : SETTINGS_COSTUMERS_LIST_PATH
+  await executeRequest('DELETE', `${path}/${encodeURIComponent(id)}`)
+}
+
 async function createVersion(versionNumber: string, markdownContent: string): Promise<string> {
   const response = await executeRequest('POST', SETTINGS_VERSIONS_PATH, {
     versionNumber,

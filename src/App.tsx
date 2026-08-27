@@ -755,6 +755,11 @@ function App() {
     setActiveMenu('reports')
   }
 
+  function openDocumentControl() {
+    setActiveMenu('document-control')
+    void loadAnalyzerReports()
+  }
+
   function resetAnalyzerReportViewer() {
     reportLoadSequence.current += 1
     setReportPendingOpen(null)
@@ -1401,7 +1406,7 @@ function App() {
             itemId="document-control"
             isActive={activeMenu === 'document-control'}
             disabled={isSystemConfigured === false}
-            onClick={() => setActiveMenu('document-control')}
+            onClick={openDocumentControl}
           >
             Document control
           </NavItem>
@@ -1682,6 +1687,8 @@ function App() {
       ) : activeMenu === 'document-control' ? (
         <DocumentDependenciesPage
           reports={analyzerReports satisfies DocumentReport[]}
+          isLoadingReports={isLoadingAnalyzerReports}
+          reportsError={analyzerReportsError}
           fetchReportContent={fetchReportContent}
         />
       ) : activeMenu === 'analyzer' ? (
