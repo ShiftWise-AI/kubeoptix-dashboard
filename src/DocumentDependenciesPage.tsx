@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, CardBody, CardHeader, Form, FormGroup, FormSelect, FormSelectOption, Modal, ModalBody, ModalFooter, ModalHeader, ModalVariant, PageSection, Spinner, TextArea, TextInput, Title } from '@patternfly/react-core'
 import { PlusIcon } from '@patternfly/react-icons'
 import { createPerson, fetchDocumentDependencies, saveDocumentVersion, type Person } from './services/documentVersionService'
 
 type DialogKind = 'author' | 'customer' | null
 
-function DocumentDependenciesPage() {
+export type DocumentReport = {
+  name: string
+}
+
+type DocumentDependenciesPageProps = {
+  reports: DocumentReport[]
+  fetchReportContent: (fileName: string) => Promise<string>
+}
+
+function DocumentDependenciesPage({ reports, fetchReportContent }: DocumentDependenciesPageProps) {
   const [authors, setAuthors] = useState<Person[]>([])
   const [customers, setCustomers] = useState<Person[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -21,9 +30,13 @@ function DocumentDependenciesPage() {
   const [authorId, setAuthorId] = useState('')
   const [costumersListId, setCostumersListId] = useState('')
   const [versionNumber, setVersionNumber] = useState('')
+  const [selectedReportName, setSelectedReportName] = useState('')
   const [markdownContent, setMarkdownContent] = useState('')
+  const [isLoadingMarkdown, setIsLoadingMarkdown] = useState(false)
+  const [markdownContentError, setMarkdownContentError] = useState<string | null>(null)
   const [isSavingDocument, setIsSavingDocument] = useState(false)
   const [documentMessage, setDocumentMessage] = useState<string | null>(null)
+  const reportLoadSequence = useRef(0)
 
   async function loadDependencies() {
     setIsLoading(true)
@@ -58,7 +71,7 @@ function DocumentDependenciesPage() {
   }
 
   async function submitDocument() {
-    if (!title.trim() || !projectManager.trim() || !costumer.trim() || !authorId || !costumersListId || !versionNumber.trim() || !markdownContent.trim()) {
+    if (!title.trim() || !projectManager.trim() || !costumer.trim() || !authorId || !costumersListId || !versionNumber.trim() || !selectedReportName || !markdownContent.trim()) {
       setDocumentMessage('Complete all document and version fields before saving.')
       return
     }
@@ -75,12 +88,38 @@ function DocumentDependenciesPage() {
         markdownContent,
       })
       setVersionNumber('')
-      setMarkdownContent('')
       setDocumentMessage('Document version saved. It is ready for PDF generation.')
     } catch (saveError) {
       setDocumentMessage(saveError instanceof Error ? saveError.message : 'Could not save the document version.')
     } finally {
       setIsSavingDocument(false)
+    }
+  }
+
+  async function selectReport(reportName: string) {
+    const loadSequence = ++reportLoadSequence.current
+    setSelectedReportName(reportName)
+    setMarkdownContent('')
+    setMarkdownContentError(null)
+
+    if (!reportName) {
+      return
+    }
+
+    setIsLoadingMarkdown(true)
+    try {
+      const content = await fetchReportContent(reportName)
+      if (loadSequence === reportLoadSequence.current) {
+        setMarkdownContent(content)
+      }
+    } catch (loadError) {
+      if (loadSequence === reportLoadSequence.current) {
+        setMarkdownContentError(loadError instanceof Error ? loadError.message : 'Could not load the report content.')
+      }
+    } finally {
+      if (loadSequence === reportLoadSequence.current) {
+        setIsLoadingMarkdown(false)
+      }
     }
   }
 
@@ -102,7 +141,11 @@ function DocumentDependenciesPage() {
           <FormGroup label="Author" isRequired fieldId="document-author"><FormSelect id="document-author" value={authorId} onChange={(_event, value) => setAuthorId(value)}><FormSelectOption value="" label="Select an author" isPlaceholder />{authors.map((author) => <FormSelectOption key={author.id} value={author.id} label={author.name} />)}</FormSelect></FormGroup>
           <FormGroup label="Costumers list" isRequired fieldId="document-costumers-list"><FormSelect id="document-costumers-list" value={costumersListId} onChange={(_event, value) => setCostumersListId(value)}><FormSelectOption value="" label="Select a customer" isPlaceholder />{customers.map((customer) => <FormSelectOption key={customer.id} value={customer.id} label={customer.name} />)}</FormSelect></FormGroup>
           <FormGroup label="Version number" isRequired fieldId="document-version-number"><TextInput id="document-version-number" value={versionNumber} onChange={(_event, value) => setVersionNumber(value)} /></FormGroup>
-          <FormGroup className="document-control-form__markdown" label="Markdown content" isRequired fieldId="document-markdown-content"><TextArea id="document-markdown-content" value={markdownContent} onChange={(_event, value) => setMarkdownContent(value)} resizeOrientation="vertical" /></FormGroup>
+          <FormGroup label="Report" isRequired fieldId="document-report"><FormSelect id="document-report" value={selectedReportName} onChange={(_event, value) => { void selectReport(value) }} isDisabled={reports.length === 0 || isLoadingMarkdown}><FormSelectOption value="" label={reports.length > 0 ? 'Select a report' : 'No reports available'} isPlaceholder />{reports.map((report) => <FormSelectOption key={report.name} value={report.name} label={report.name} />)}</FormSelect></FormGroup>
+          <FormGroup className="document-control-form__markdown" label="Markdown content" isRequired fieldId="document-markdown-content">
+            {markdownContentError ? <Alert isInline variant="danger" title="Could not load report content">{markdownContentError}</Alert> : null}
+            <TextArea id="document-markdown-content" value={isLoadingMarkdown ? 'Loading report content...' : markdownContent} readOnly resizeOrientation="vertical" />
+          </FormGroup>
           <div className="document-control-form__actions"><Button type="submit" variant="primary" isLoading={isSavingDocument}>Save document version</Button></div>
         </Form>
       </CardBody>

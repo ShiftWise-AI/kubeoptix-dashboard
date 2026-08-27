@@ -45,6 +45,7 @@ import { ChartLineIcon, DownloadIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderI
 import MarkdownViewer from './MarkdownViewer'
 import ConfigurationsPage from './ConfigurationsPage'
 import DocumentDependenciesPage from './DocumentDependenciesPage'
+import type { DocumentReport } from './DocumentDependenciesPage'
 import dashboardLogo from '../image/logo.png'
 import { fetchSystemSettings } from './services/settingsService'
 import type { SystemSettings } from './services/settingsService'
@@ -1397,19 +1398,19 @@ function App() {
             Reports
           </NavItem>
           <NavItem
-            itemId="configurations"
-            isActive={activeMenu === 'configurations'}
-            onClick={() => setActiveMenu('configurations')}
-          >
-            Configurations
-          </NavItem>
-          <NavItem
             itemId="document-control"
             isActive={activeMenu === 'document-control'}
             disabled={isSystemConfigured === false}
             onClick={() => setActiveMenu('document-control')}
           >
             Document control
+          </NavItem>
+          <NavItem
+            itemId="configurations"
+            isActive={activeMenu === 'configurations'}
+            onClick={() => setActiveMenu('configurations')}
+          >
+            Configurations
           </NavItem>
         </NavList>
       </Nav>
@@ -1679,7 +1680,10 @@ function App() {
       ) : activeMenu === 'configurations' ? (
         <ConfigurationsPage onSettingsChange={handleSettingsChange} />
       ) : activeMenu === 'document-control' ? (
-        <DocumentDependenciesPage />
+        <DocumentDependenciesPage
+          reports={analyzerReports satisfies DocumentReport[]}
+          fetchReportContent={fetchReportContent}
+        />
       ) : activeMenu === 'analyzer' ? (
         <>
           <PageSection>
