@@ -259,10 +259,28 @@ body {
   gap: 1rem;
 }
 
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.section-title-icon {
+  color: var(--pf-t--global--icon--color--brand--default);
+  font-size: 1.1rem;
+}
+
 .dependency-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.dependency-card .pf-v6-c-card__header,
+.dependency-card .pf-v6-c-card__body {
+  padding-block: 0.75rem;
+  padding-inline: 1rem;
 }
 
 .document-control-card {

@@ -136,7 +136,6 @@ type DocumentRecord = {
   costumer: string
   authorId: string | null
   costumersListId: string | null
-  markdownContent: string
 }
 
 function normalizeDocumentRecord(payload: unknown): DocumentRecord | null {
@@ -156,7 +155,6 @@ function normalizeDocumentRecord(payload: unknown): DocumentRecord | null {
     costumer: typeof record.costumer === 'string' ? record.costumer : '',
     authorId: typeof record.authorId === 'string' ? record.authorId : null,
     costumersListId: typeof record.costumersListId === 'string' ? record.costumersListId : null,
-    markdownContent: typeof record.markdownContent === 'string' ? record.markdownContent : '',
   }
 }
 
@@ -232,8 +230,48 @@ export type ExistingDocumentSummary = {
   versionNumber: number
 }
 
+// Finds the highest-numbered version among this base name's combo documents and returns its
+// number + markdown content (markdownContent now lives only on `versions`, not `documents`).
+async function fetchLatestVersionForBaseName(baseName: string): Promise<{ versionNumber: number; markdownContent: string } | null> {
+  const versionsResponse = await executeRequest('GET', SETTINGS_VERSIONS_PATH)
+  if (!Array.isArray(versionsResponse.payload)) {
+    return null
+  }
+
+  let latest: { versionNumber: number; markdownContent: string } | null = null
+  for (const item of versionsResponse.payload) {
+    if (typeof item !== 'object' || item === null) {
+      continue
+    }
+
+    const record = item as Record<string, unknown>
+    const documentName = typeof record.documentName === 'string' ? record.documentName : ''
+    if (parseComboDocumentName(documentName)?.baseName !== baseName) {
+      continue
+    }
+
+    const versionNumber = typeof record.versionNumber === 'number'
+      ? record.versionNumber
+      : Number(record.versionNumber)
+
+    if (!Number.isFinite(versionNumber)) {
+      continue
+    }
+
+    if (!latest || versionNumber > latest.versionNumber) {
+      latest = {
+        versionNumber,
+        markdownContent: typeof record.markdownContent === 'string' ? record.markdownContent : '',
+      }
+    }
+  }
+
+  return latest
+}
+
 // Looks up every document combo saved for this base name and aggregates them: authors/customers
-// are the union across combos, and the other fields/version number come from the latest save.
+// are the union across combos, and the markdown content/version number come from the latest
+// saved version (documents no longer store markdownContent themselves).
 export async function fetchExistingDocument(baseName: string): Promise<ExistingDocumentSummary | null> {
   const normalizedBaseName = baseName.trim()
   if (!normalizedBaseName) {
@@ -245,9 +283,7 @@ export async function fetchExistingDocument(baseName: string): Promise<ExistingD
     return null
   }
 
-  const nextVersion = await computeNextVersionNumber(normalizedBaseName)
-  // computeNextVersionNumber already adds +0.1, so the last saved version is one step back.
-  const latestVersionNumber = roundVersion(nextVersion - VERSION_INCREMENT)
+  const latestVersion = await fetchLatestVersionForBaseName(normalizedBaseName)
 
   const representative = combos[0]
   return {
@@ -260,8 +296,8 @@ export async function fetchExistingDocument(baseName: string): Promise<ExistingD
     costumersListIds: Array.from(new Set(
       combos.map((combo) => combo.costumersListId).filter((id): id is string => id !== null),
     )),
-    markdownContent: representative.markdownContent,
-    versionNumber: latestVersionNumber,
+    markdownContent: latestVersion?.markdownContent ?? '',
+    versionNumber: latestVersion?.versionNumber ?? 0,
   }
 }
 
@@ -281,6 +317,7 @@ export async function saveDocument(input: SaveDocumentInput): Promise<number> {
   for (const authorId of input.authorIds) {
     for (const costumersListId of input.costumersListIds) {
       const comboDocumentName = buildComboDocumentName(input.documentName, authorId, costumersListId)
+      // DocumentRequest no longer has a markdownContent field; only `versions` stores it.
       const documentPayload = {
         documentName: comboDocumentName,
         title: input.title,
@@ -288,7 +325,6 @@ export async function saveDocument(input: SaveDocumentInput): Promise<number> {
         costumer: input.costumer,
         authorId,
         costumersListId,
-        markdownContent: input.markdownContent,
       }
 
       const existingDocument = await fetchDocument(comboDocumentName)
@@ -317,6 +353,24 @@ export async function deleteDocument(baseName: string): Promise<void> {
   for (const combo of combos) {
     await executeRequest('DELETE', getDocumentPath(combo.documentName))
   }
+}
+
+// Lists every distinct base report name (documentName minus the author/customer combo suffix)
+// that has at least one document saved in the database, used to prioritize DB-backed reports
+// in the reports list before falling back to the disk listing API.
+export async function fetchAllDocumentBaseNames(): Promise<string[]> {
+  const response = await executeRequest('GET', SETTINGS_DOCUMENTS_PATH)
+  if (!Array.isArray(response.payload)) {
+    return []
+  }
+
+  const baseNames = response.payload
+    .map((item) => normalizeDocumentRecord(item))
+    .filter((item): item is DocumentRecord => item !== null)
+    .map((item) => parseComboDocumentName(item.documentName)?.baseName)
+    .filter((baseName): baseName is string => Boolean(baseName))
+
+  return Array.from(new Set(baseNames))
 }
 
 function getReporterReportPath(fileName: string): string {

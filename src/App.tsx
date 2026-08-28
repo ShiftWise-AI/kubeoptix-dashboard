@@ -305,11 +305,16 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
   }
 }
 
-// Removes the raw report file from disk (backend endpoint pending implementation).
+// Removes the raw report file from disk via the core-ai-api report deletion endpoint.
 async function deleteReportContent(fileName: string): Promise<void> {
-  const response = await fetch(getReporterReportPath(fileName), { method: 'DELETE' })
+  const response = await fetch(CORE_AI_REPORT_STATUS_PATH, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 'core-ai-api': fileName }),
+  })
 
-  if (!response.ok) {
+  // Treat "already gone" as success so repeated/idempotent deletes don't surface an error.
+  if (!response.ok && response.status !== 404) {
     const responseText = await response.text()
     let message = responseText || `Request failed with status ${response.status}`
 
