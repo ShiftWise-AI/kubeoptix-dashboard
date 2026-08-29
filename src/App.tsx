@@ -43,7 +43,6 @@ import { fetchSystemSettings } from './services/settingsService'
 import type { SystemSettings } from './services/settingsService'
 import {
   ANALYZER_ASSESSMENT_NAMESPACES_PATH,
-  ANALYZER_CLEANUP_PATH,
   ANALYZER_REPORT_FILES_PATH,
   ANALYZER_STATUS_PATH,
   CORE_AI_REPORT_STATUS_PATH,
@@ -306,11 +305,10 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
 }
 
 // Removes the raw report file from disk via the core-ai-api report deletion endpoint.
+// The API expects the filename as a path segment (DELETE /reports/{fileName}), not a JSON body.
 async function deleteReportContent(fileName: string): Promise<void> {
-  const response = await fetch(CORE_AI_REPORT_STATUS_PATH, {
+  const response = await fetch(`${CORE_AI_REPORT_STATUS_PATH}/${encodeURIComponent(fileName)}`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 'core-ai-api': fileName }),
   })
 
   // Treat "already gone" as success so repeated/idempotent deletes don't surface an error.
@@ -320,7 +318,14 @@ async function deleteReportContent(fileName: string): Promise<void> {
 
     try {
       const payload = JSON.parse(responseText) as unknown
-      if (typeof payload === 'object' && payload !== null && 'error' in payload) {
+      if (typeof payload === 'object' && payload !== null && 'detail' in payload) {
+        const detail = (payload as { detail: unknown }).detail
+        if (typeof detail === 'object' && detail !== null && 'message' in detail) {
+          message = String((detail as { message: unknown }).message)
+        } else if (typeof detail === 'string') {
+          message = detail
+        }
+      } else if (typeof payload === 'object' && payload !== null && 'error' in payload) {
         message = String(payload.error)
       }
     } catch {
@@ -354,7 +359,6 @@ function App() {
   const [hasAttemptedAutoLoadAnalyzerNamespaces, setHasAttemptedAutoLoadAnalyzerNamespaces] = useState(false)
   const [mode, setMode] = useState<AnalysisMode>('predictive')
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
-  const [isDeleteReportsModalOpen, setIsDeleteReportsModalOpen] = useState(false)
   const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
   const [analyzerReports, setAnalyzerReports] = useState<AnalyzerReportFile[]>([])
   const [isLoadingAnalyzerReports, setIsLoadingAnalyzerReports] = useState(false)
@@ -381,7 +385,6 @@ function App() {
   const [collectResponse, setCollectResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupAssessmentResponse, setCleanupAssessmentResponse] = useState<ApiResponseState>(initialResponseState)
   const [, setRunResponse] = useState<ApiResponseState>(initialResponseState)
-  const [cleanupReportsResponse, setCleanupReportsResponse] = useState<ApiResponseState>(initialResponseState)
 
   const mastheadLogo = dashboardLogo
   const collectionCompleted = hasCollectionStarted && !isCollectionInProgress && !collectResponse.error
@@ -555,7 +558,6 @@ function App() {
 
   useEffect(() => {
     if (activeMenu === 'harvester') {
-      setIsDeleteReportsModalOpen(false)
       void loadNamespaces()
       return
     }
@@ -970,34 +972,6 @@ function App() {
       setHasAnalyzerStarted(false)
       setIsAnalyzerInProgress(false)
       setRunResponse({
-        pending: false,
-        statusCode: null,
-        payload: null,
-        error: error instanceof Error ? error.message : 'Unknown request error',
-      })
-    }
-  }
-
-  async function handleCleanupReports() {
-    setIsDeleteReportsModalOpen(false)
-    setCleanupReportsResponse((previousState) => ({
-      ...previousState,
-      pending: true,
-      error: null,
-    }))
-
-    try {
-      const result = await executeRequest('DELETE', ANALYZER_CLEANUP_PATH)
-      setAnalyzerReports([])
-      setCleanupReportsResponse({
-        pending: false,
-        statusCode: result.statusCode,
-        payload: result.payload,
-        error: null,
-      })
-      void loadAnalyzerReports()
-    } catch (error) {
-      setCleanupReportsResponse({
         pending: false,
         statusCode: null,
         payload: null,
@@ -1443,15 +1417,6 @@ function App() {
                   </FormGroup>
                   <div className="collect-run-actions">
                     <Button
-                      type="button"
-                      variant="danger"
-                      icon={<TrashIcon />}
-                      onClick={() => setIsDeleteReportsModalOpen(true)}
-                      isDisabled={isAnalyzerInProgress || cleanupReportsResponse.pending}
-                    >
-                      {cleanupReportsResponse.pending ? <Spinner size="md" /> : 'DELETE ALL'}
-                    </Button>
-                    <Button
                       type="submit"
                       className="collect-run-button"
                       isDisabled={isAnalyzerInProgress || selectedAnalyzerNamespaces.length === 0}
@@ -1498,25 +1463,6 @@ function App() {
               </CardBody>
             </Card>
           </PageSection>
-
-          <Modal
-            variant={ModalVariant.small}
-            isOpen={isDeleteReportsModalOpen}
-            onClose={() => setIsDeleteReportsModalOpen(false)}
-          >
-            <ModalHeader title="Do you want to perform this action?" labelId="delete-reports-modal-title" />
-            <ModalBody id="delete-reports-modal-description">
-              This action will remove all analyzer reports.
-            </ModalBody>
-            <ModalFooter>
-              <Button variant="danger" onClick={handleCleanupReports} isLoading={cleanupReportsResponse.pending}>
-                Yes, run
-              </Button>
-              <Button variant="link" onClick={() => setIsDeleteReportsModalOpen(false)}>
-                Cancel
-              </Button>
-            </ModalFooter>
-          </Modal>
         </>
       ) : (
         <DocumentDependenciesPage

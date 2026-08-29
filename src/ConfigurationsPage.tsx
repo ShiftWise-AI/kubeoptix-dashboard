@@ -259,9 +259,11 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
             ) : null}
             <Form onSubmit={(event) => void handleCreateSubmit(event)}>
               {renderFormFields()}
-              <Button type="submit" variant="primary" isLoading={isSaving} isDisabled={isSaving}>
-                Save settings
-              </Button>
+              <div className="form-actions-right">
+                <Button type="submit" variant="primary" isLoading={isSaving} isDisabled={isSaving}>
+                  Save settings
+                </Button>
+              </div>
             </Form>
           </CardBody>
         </Card>

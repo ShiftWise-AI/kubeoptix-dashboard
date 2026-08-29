@@ -259,6 +259,12 @@ body {
   gap: 1rem;
 }
 
+.form-actions-right {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
 .section-title {
   display: flex;
   align-items: center;
