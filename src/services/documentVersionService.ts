@@ -32,14 +32,6 @@ export type SaveDocumentInput = {
   markdownContent: string
 }
 
-export type ReporterPdfParams = {
-  customer: string
-  description: string
-  version: number
-  author: string
-  projectManager: string
-}
-
 const REPORTER_API_PATH = '/api/reporter'
 
 // The version scale grows in 0.1 increments (0.1, 0.2, ...) with no upper cap.
@@ -377,40 +369,53 @@ function getReporterReportPath(fileName: string): string {
   return `${REPORTER_API_PATH}/report/${encodeURIComponent(fileName)}`
 }
 
-function getReporterReportPdfPath(fileName: string, params: ReporterPdfParams): string {
-  const queryParams = new URLSearchParams({
-    customer: params.customer,
-    description: params.description,
-    version: String(params.version),
-    status: 'Draft',
-    author: params.author,
-  })
-  queryParams.set('project-manager', params.projectManager)
+// PUT only persists the markdown to disk (reporter API responds with {filename, status:"saved"},
+// not a PDF); the actual render lives behind GET /report/{filename}/pdf.
+async function throwOnResponseError(response: Response): Promise<never> {
+  const responseText = await response.text()
+  let message = responseText || `Request failed with status ${response.status}`
 
-  return `${getReporterReportPath(fileName)}/pdf?${queryParams.toString()}`
+  try {
+    const payload = JSON.parse(responseText) as unknown
+    if (typeof payload === 'object' && payload !== null && 'detail' in payload) {
+      message = String((payload as { detail: unknown }).detail)
+    } else if (typeof payload === 'object' && payload !== null && 'error' in payload) {
+      message = String((payload as { error: unknown }).error)
+    }
+  } catch {
+    // Keep the plain-text response as the error message.
+  }
+
+  throw new ApiRequestError(message, response.status, responseText)
 }
 
-export async function fetchReportPdf(fileName: string, params: ReporterPdfParams): Promise<Blob> {
-  const response = await fetch(getReporterReportPdfPath(fileName, params), {
+// Re-writes the report file to disk (it may have been deleted after being versioned in the DB,
+// and the pdf endpoint retrieves the selected version from configurations-api) then fetches the PDF blob.
+export async function fetchReportPdf(
+  fileName: string,
+  markdownContent: string,
+  versionNumber: number,
+): Promise<Blob> {
+  const saveResponse = await fetch(getReporterReportPath(fileName), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/markdown' },
+    body: markdownContent,
+  })
+
+  if (!saveResponse.ok) {
+    await throwOnResponseError(saveResponse)
+  }
+
+  const pdfUrl = new URL(`${getReporterReportPath(fileName)}/pdf`, window.location.origin)
+  pdfUrl.searchParams.set('versionNumber', versionNumber.toFixed(1))
+  const pdfResponse = await fetch(pdfUrl, {
     method: 'GET',
     headers: { Accept: 'application/pdf' },
   })
 
-  if (!response.ok) {
-    const responseText = await response.text()
-    let message = responseText || `Request failed with status ${response.status}`
-
-    try {
-      const payload = JSON.parse(responseText) as unknown
-      if (typeof payload === 'object' && payload !== null && 'error' in payload) {
-        message = String(payload.error)
-      }
-    } catch {
-      // Keep the plain-text response as the error message.
-    }
-
-    throw new ApiRequestError(message, response.status, responseText)
+  if (!pdfResponse.ok) {
+    await throwOnResponseError(pdfResponse)
   }
 
-  return response.blob()
+  return pdfResponse.blob()
 }

@@ -10,6 +10,7 @@ import {
   fetchAllDocumentBaseNames,
   fetchDocumentDependencies,
   fetchExistingDocument,
+  fetchReportPdf,
   saveDocument,
   type Person,
 } from './services/documentVersionService'
@@ -100,7 +101,7 @@ function DocumentDependenciesPage({
   const [isSavingDocument, setIsSavingDocument] = useState(false)
   const [documentMessage, setDocumentMessage] = useState<string | null>(null)
   const [savedDocumentForExport, setSavedDocumentForExport] = useState<SavedDocumentForExport | null>(null)
-  const [isExportingPdf] = useState(false)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [pdfExportError, setPdfExportError] = useState<string | null>(null)
   const [baseline, setBaseline] = useState<DocumentBaseline | null>(null)
   const [isCheckingExistingDocument, setIsCheckingExistingDocument] = useState(false)
@@ -305,13 +306,34 @@ function DocumentDependenciesPage({
     }
   }
 
-  // TODO: rework to fetch the PDF source from the database instead of the (now disk-deleted) report file.
+  // The report file may already be gone from disk after versioning, so the current markdown
+  // content (from the DB / editor state) is submitted directly; the file name is the only key.
   async function exportSavedDocumentPdf() {
     if (!savedDocumentForExport) {
       return
     }
 
-    setPdfExportError('PDF export is being reworked to read from the database and is temporarily unavailable.')
+    setIsExportingPdf(true)
+    setPdfExportError(null)
+    try {
+      const pdfBlob = await fetchReportPdf(
+        savedDocumentForExport.fileName,
+        markdownContent,
+        savedDocumentForExport.version,
+      )
+      const downloadUrl = URL.createObjectURL(pdfBlob)
+      const downloadLink = document.createElement('a')
+      downloadLink.href = downloadUrl
+      downloadLink.download = savedDocumentForExport.fileName.replace(/\.md$/i, '.pdf')
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      URL.revokeObjectURL(downloadUrl)
+    } catch (exportError) {
+      setPdfExportError(exportError instanceof Error ? exportError.message : 'Could not export the report as PDF.')
+    } finally {
+      setIsExportingPdf(false)
+    }
   }
 
   function downloadMarkdown() {
@@ -425,6 +447,18 @@ function DocumentDependenciesPage({
           authorIds: existingDocument.authorIds,
           costumersListIds: existingDocument.costumersListIds,
           markdownContent: loadedMarkdown,
+        })
+        // Already-saved documents can be exported right away, without requiring a fresh save.
+        setSavedDocumentForExport({
+          fileName: reportName,
+          customer: existingDocument.costumer,
+          description: existingDocument.title || derivedDocumentName,
+          version: existingDocument.versionNumber,
+          author: authors
+            .filter((author) => existingDocument.authorIds.includes(author.id))
+            .map((author) => author.name)
+            .join(', '),
+          projectManager: existingDocument.projectManager,
         })
         setDocumentMessage(
           `This document already exists (last saved version ${existingDocument.versionNumber.toFixed(1)}). `
