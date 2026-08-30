@@ -29,6 +29,8 @@ export type SaveDocumentInput = {
   costumer: string
   authorIds: string[]
   costumersListIds: string[]
+  // Required by VersionRequest.description on the API; distinct from the document title.
+  description: string
   markdownContent: string
 }
 
@@ -218,19 +220,20 @@ export type ExistingDocumentSummary = {
   costumer: string
   authorIds: string[]
   costumersListIds: string[]
+  description: string
   markdownContent: string
   versionNumber: number
 }
 
 // Finds the highest-numbered version among this base name's combo documents and returns its
-// number + markdown content (markdownContent now lives only on `versions`, not `documents`).
-async function fetchLatestVersionForBaseName(baseName: string): Promise<{ versionNumber: number; markdownContent: string } | null> {
+// number + description + markdown content (both now live only on `versions`, not `documents`).
+async function fetchLatestVersionForBaseName(baseName: string): Promise<{ versionNumber: number; description: string; markdownContent: string } | null> {
   const versionsResponse = await executeRequest('GET', SETTINGS_VERSIONS_PATH)
   if (!Array.isArray(versionsResponse.payload)) {
     return null
   }
 
-  let latest: { versionNumber: number; markdownContent: string } | null = null
+  let latest: { versionNumber: number; description: string; markdownContent: string } | null = null
   for (const item of versionsResponse.payload) {
     if (typeof item !== 'object' || item === null) {
       continue
@@ -253,6 +256,7 @@ async function fetchLatestVersionForBaseName(baseName: string): Promise<{ versio
     if (!latest || versionNumber > latest.versionNumber) {
       latest = {
         versionNumber,
+        description: typeof record.description === 'string' ? record.description : '',
         markdownContent: typeof record.markdownContent === 'string' ? record.markdownContent : '',
       }
     }
@@ -288,6 +292,7 @@ export async function fetchExistingDocument(baseName: string): Promise<ExistingD
     costumersListIds: Array.from(new Set(
       combos.map((combo) => combo.costumersListId).filter((id): id is string => id !== null),
     )),
+    description: latestVersion?.description ?? '',
     markdownContent: latestVersion?.markdownContent ?? '',
     versionNumber: latestVersion?.versionNumber ?? 0,
   }
@@ -302,6 +307,10 @@ export async function saveDocument(input: SaveDocumentInput): Promise<number> {
 
   if (input.costumersListIds.length === 0) {
     throw new Error('Select at least one customer.')
+  }
+
+  if (!input.description.trim()) {
+    throw new Error('Description is required.')
   }
 
   const nextVersion = await computeNextVersionNumber(input.documentName)
@@ -328,8 +337,10 @@ export async function saveDocument(input: SaveDocumentInput): Promise<number> {
 
       // VersionRequest.versionNumber is a string field in the API (see /q/openapi), so the
       // numeric value is formatted with a fixed 1-decimal precision before sending it.
+      // The backend rejects the request with 400 if `description` is missing/blank.
       await executeRequest('POST', SETTINGS_VERSIONS_PATH, {
         versionNumber: nextVersion.toFixed(1),
+        description: input.description.trim(),
         markdownContent: input.markdownContent,
         documentName: comboDocumentName,
       })

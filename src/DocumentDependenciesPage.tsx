@@ -50,6 +50,7 @@ type SavedDocumentForExport = {
 // Snapshot of the last saved state for the selected report's document, used to detect edits.
 type DocumentBaseline = {
   title: string
+  description: string
   projectManager: string
   costumer: string
   authorIds: string[]
@@ -87,6 +88,7 @@ function DocumentDependenciesPage({
   const [isSaving, setIsSaving] = useState(false)
   const [deletingPersonId, setDeletingPersonId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [projectManager, setProjectManager] = useState('')
   const [costumer, setCostumer] = useState('')
   // Author and Costumers list are multi-valued: the API only stores one authorId/costumersListId
@@ -238,7 +240,7 @@ function DocumentDependenciesPage({
   }
 
   async function submitDocument() {
-    if (!title.trim() || !projectManager.trim() || !costumer.trim() || authorIds.length === 0 || costumersListIds.length === 0 || !selectedReportName || !markdownContent.trim()) {
+    if (!title.trim() || !description.trim() || !projectManager.trim() || !costumer.trim() || authorIds.length === 0 || costumersListIds.length === 0 || !selectedReportName || !markdownContent.trim()) {
       setDocumentMessage('Complete all document fields (select at least one author and one customer) before saving.')
       return
     }
@@ -256,6 +258,7 @@ function DocumentDependenciesPage({
       const nextVersion = await saveDocument({
         documentName,
         title: title.trim(),
+        description: description.trim(),
         projectManager: projectManager.trim(),
         costumer: costumer.trim(),
         authorIds,
@@ -269,7 +272,7 @@ function DocumentDependenciesPage({
       setSavedDocumentForExport({
         fileName: selectedReportName,
         customer: costumer.trim(),
-        description: title.trim(),
+        description: description.trim(),
         version: nextVersion,
         author: selectedAuthorNames,
         projectManager: projectManager.trim(),
@@ -277,6 +280,7 @@ function DocumentDependenciesPage({
       // The just-saved state becomes the new baseline, so Save disables again until the next edit.
       setBaseline({
         title: title.trim(),
+        description: description.trim(),
         projectManager: projectManager.trim(),
         costumer: costumer.trim(),
         authorIds,
@@ -405,6 +409,7 @@ function DocumentDependenciesPage({
     if (!reportName) {
       setDocumentName('')
       setTitle('')
+      setDescription('')
       setProjectManager('')
       setCostumer('')
       setAuthorIds([])
@@ -417,6 +422,7 @@ function DocumentDependenciesPage({
     const derivedDocumentName = reportName.replace(/\.md$/i, '')
     setDocumentName(derivedDocumentName)
     setTitle(derivedDocumentName)
+    setDescription('')
     setIsLoadingMarkdown(true)
     setIsCheckingExistingDocument(true)
 
@@ -434,6 +440,7 @@ function DocumentDependenciesPage({
 
       if (existingDocument) {
         setTitle(existingDocument.title || derivedDocumentName)
+        setDescription(existingDocument.description)
         setProjectManager(existingDocument.projectManager)
         setCostumer(existingDocument.costumer)
         setAuthorIds(existingDocument.authorIds)
@@ -442,6 +449,7 @@ function DocumentDependenciesPage({
         setMarkdownContent(loadedMarkdown)
         setBaseline({
           title: existingDocument.title || derivedDocumentName,
+          description: existingDocument.description,
           projectManager: existingDocument.projectManager,
           costumer: existingDocument.costumer,
           authorIds: existingDocument.authorIds,
@@ -452,7 +460,7 @@ function DocumentDependenciesPage({
         setSavedDocumentForExport({
           fileName: reportName,
           customer: existingDocument.costumer,
-          description: existingDocument.title || derivedDocumentName,
+          description: existingDocument.description || existingDocument.title || derivedDocumentName,
           version: existingDocument.versionNumber,
           author: authors
             .filter((author) => existingDocument.authorIds.includes(author.id))
@@ -493,6 +501,7 @@ function DocumentDependenciesPage({
   // Save is only relevant once something differs from the last loaded/saved state.
   const isDirty = !baseline
     || baseline.title !== title.trim()
+    || baseline.description !== description.trim()
     || baseline.projectManager !== projectManager.trim()
     || baseline.costumer !== costumer.trim()
     || !sameIdSet(baseline.authorIds, authorIds)
@@ -626,6 +635,7 @@ function DocumentDependenciesPage({
                   <small>Unique identifier derived from the report file name; cannot be changed.</small>
                 </FormGroup>
                 <FormGroup label="Document title" isRequired fieldId="document-title"><TextInput id="document-title" value={title} onChange={(_event, value) => setTitle(value)} /></FormGroup>
+                <FormGroup label="Description" isRequired fieldId="document-description"><TextInput id="document-description" value={description} onChange={(_event, value) => setDescription(value)} /></FormGroup>
                 <FormGroup label="Project manager" isRequired fieldId="document-project-manager"><TextInput id="document-project-manager" value={projectManager} onChange={(_event, value) => setProjectManager(value)} /></FormGroup>
                 <FormGroup label="Costumer" isRequired fieldId="document-costumer"><TextInput id="document-costumer" value={costumer} onChange={(_event, value) => setCostumer(value)} /></FormGroup>
                 <FormGroup label="Author" isRequired fieldId="document-author">
