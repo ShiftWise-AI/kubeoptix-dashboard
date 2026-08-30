@@ -24,3 +24,8 @@ export const CORE_AI_REQUEST_TIMEOUT_MS = 120_000
 export const SETTINGS_API_PATH = '/api/settings'
 export const SYSTEM_SETTINGS_PATH = `${SETTINGS_API_PATH}/system-settings`
 export const SYSTEM_SETTINGS_STATUS_PATH = `${SYSTEM_SETTINGS_PATH}/status`
+export const SETTINGS_COSTUMERS_LIST_PATH = `${SETTINGS_API_PATH}/costumers-list`
+export const SETTINGS_AUTHORS_PATH = `${SETTINGS_API_PATH}/authors`
+export const SETTINGS_VERSIONS_PATH = `${SETTINGS_API_PATH}/versions`
+// Documents are unique per documentName (PK/UK); versions relate to a document 1:n via documentName.
+export const SETTINGS_DOCUMENTS_PATH = `${SETTINGS_API_PATH}/documents`

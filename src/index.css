@@ -259,6 +259,74 @@ body {
   gap: 1rem;
 }
 
+.form-actions-right {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.section-title-icon {
+  color: var(--pf-t--global--icon--color--brand--default);
+  font-size: 1.1rem;
+}
+
+.dependency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.dependency-card .pf-v6-c-card__header,
+.dependency-card .pf-v6-c-card__body {
+  padding-block: 0.75rem;
+  padding-inline: 1rem;
+}
+
+.document-control-card {
+  margin-bottom: 1rem;
+}
+
+.document-control-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.document-control-form .pf-v6-c-form__group {
+  margin-bottom: 0;
+}
+
+.document-control-form__markdown,
+.document-control-form__actions {
+  grid-column: 1 / -1;
+}
+
+.document-control-form__markdown textarea {
+  min-height: 16rem;
+  font-family: var(--pf-t--global--font--family--mono);
+}
+
+.document-control-form__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dependency-list {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.dependency-list li + li {
+  margin-top: 0.5rem;
+}
+
 .reports-workspace {
   display: grid;
   grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
@@ -324,6 +392,50 @@ body {
   font-family: var(--pf-t--global--font--family--mono);
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.report-download-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.report-download-button {
+  width: fit-content;
+  background-color: var(--pf-t--global--color--status--success--default);
+  border-color: var(--pf-t--global--color--status--success--default);
+}
+
+.report-download-button:hover:not(:disabled) {
+  background-color: var(--pf-t--global--color--status--success--hover);
+  border-color: var(--pf-t--global--color--status--success--hover);
+}
+
+.report-version-panel {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 6px;
+  padding: 1rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.report-version-panel__heading {
+  margin-bottom: 0.75rem;
+}
+
+.report-version-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.report-version-form .pf-v6-c-form__group {
+  margin-bottom: 0;
+}
+
+.report-version-panel__actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .report-preview-modal {
@@ -501,6 +613,10 @@ body {
 
   .report-markdown-editor {
     min-height: 24rem;
+  }
+
+  .report-version-form {
+    grid-template-columns: 1fr;
   }
 
   .markdown-viewer {

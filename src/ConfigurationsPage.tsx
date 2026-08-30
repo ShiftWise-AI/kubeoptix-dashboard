@@ -34,6 +34,7 @@ import {
   type SystemSettings,
   type SystemSettingsInput,
 } from './services/settingsService'
+import { CogIcon } from '@patternfly/react-icons'
 
 type ConfigurationsPageProps = {
   onSettingsChange: (settings: SystemSettings | null) => void
@@ -245,7 +246,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
       {!settings ? (
         <Card className="pf-v5-c-card">
           <CardHeader>
-            <Title headingLevel="h2" size="xl">System settings</Title>
+            <Title headingLevel="h2" size="xl"><span className="section-title"><CogIcon className="section-title-icon" />System settings</span></Title>
           </CardHeader>
           <CardBody>
             <Alert isInline variant="info" title="Initial configuration required">
@@ -258,9 +259,11 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
             ) : null}
             <Form onSubmit={(event) => void handleCreateSubmit(event)}>
               {renderFormFields()}
-              <Button type="submit" variant="primary" isLoading={isSaving} isDisabled={isSaving}>
-                Save settings
-              </Button>
+              <div className="form-actions-right">
+                <Button type="submit" variant="primary" isLoading={isSaving} isDisabled={isSaving}>
+                  Save settings
+                </Button>
+              </div>
             </Form>
           </CardBody>
         </Card>
@@ -268,7 +271,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
         <Card className="pf-v5-c-card">
           <CardHeader>
             <div className="reports-page-heading">
-              <Title headingLevel="h2" size="xl">System settings</Title>
+              <Title headingLevel="h2" size="xl"><span className="section-title"><CogIcon className="section-title-icon" />System settings</span></Title>
               <Button type="button" variant="secondary" onClick={openEditModal}>
                 Edit settings
               </Button>

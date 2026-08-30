@@ -14,10 +14,6 @@ import {
   Masthead,
   MastheadBrand,
   MastheadContent,
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuList,
   Modal,
   ModalBody,
   ModalFooter,
@@ -33,21 +29,20 @@ import {
   Radio,
   Spinner,
   Switch,
-  TextArea,
   TextInput,
   TreeView,
   Title,
 } from '@patternfly/react-core'
 import type { TreeViewDataItem } from '@patternfly/react-core'
-import { ChartLineIcon, EyeIcon, FileAltIcon, FilePdfIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
-import MarkdownViewer from './MarkdownViewer'
+import { ChartLineIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
 import ConfigurationsPage from './ConfigurationsPage'
+import DocumentDependenciesPage from './DocumentDependenciesPage'
+import type { DocumentReport } from './DocumentDependenciesPage'
 import dashboardLogo from '../image/logo.png'
-import { fetchSystemSettingsExists } from './services/settingsService'
+import { fetchSystemSettings } from './services/settingsService'
 import type { SystemSettings } from './services/settingsService'
 import {
   ANALYZER_ASSESSMENT_NAMESPACES_PATH,
-  ANALYZER_CLEANUP_PATH,
   ANALYZER_REPORT_FILES_PATH,
   ANALYZER_STATUS_PATH,
   CORE_AI_REPORT_STATUS_PATH,
@@ -58,7 +53,6 @@ import { runAnalysis, type AnalysisMode } from './services/analysisService'
 
 type MenuKey = 'harvester' | 'analyzer' | 'reports' | 'configurations'
 type ColorScheme = 'system' | 'dark'
-type ReportSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
 type ApiResponseState = {
   pending: boolean
@@ -70,15 +64,6 @@ type ApiResponseState = {
 type AnalyzerReportFile = {
   name: string
   createdAt: string | null
-}
-
-type PdfExportParams = {
-  customer: string
-  description: string
-  version: string
-  status: string
-  author: string
-  projectManager: string
 }
 
 const MESSAGE_DISMISS_DELAY_MS = 15_000
@@ -106,36 +91,6 @@ const REPORTER_API_PATH = '/api/reporter'
 
 function getReporterReportPath(fileName: string): string {
   return `${REPORTER_API_PATH}/report/${encodeURIComponent(fileName)}`
-}
-
-function getReporterReportPdfPath(fileName: string, params?: PdfExportParams): string {
-  const path = `${getReporterReportPath(fileName)}/pdf`
-
-  if (!params) {
-    return path
-  }
-
-  const queryParams = new URLSearchParams({
-    customer: params.customer,
-    description: params.description,
-    version: params.version,
-    status: params.status,
-    author: params.author,
-  })
-  queryParams.set('project-manager', params.projectManager)
-
-  return `${path}?${queryParams.toString()}`
-}
-
-function createInitialPdfExportParams(): PdfExportParams {
-  return {
-    customer: '',
-    description: '',
-    version: '',
-    status: '',
-    author: '',
-    projectManager: '',
-  }
 }
 
 const initialResponseState = (): ApiResponseState => ({
@@ -349,19 +304,28 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
   }
 }
 
-async function fetchReportPdf(fileName: string, params: PdfExportParams): Promise<Blob> {
-  const response = await fetch(getReporterReportPdfPath(fileName, params), {
-    method: 'GET',
-    headers: { Accept: 'application/pdf' },
+// Removes the raw report file from disk via the core-ai-api report deletion endpoint.
+// The API expects the filename as a path segment (DELETE /reports/{fileName}), not a JSON body.
+async function deleteReportContent(fileName: string): Promise<void> {
+  const response = await fetch(`${CORE_AI_REPORT_STATUS_PATH}/${encodeURIComponent(fileName)}`, {
+    method: 'DELETE',
   })
 
-  if (!response.ok) {
+  // Treat "already gone" as success so repeated/idempotent deletes don't surface an error.
+  if (!response.ok && response.status !== 404) {
     const responseText = await response.text()
     let message = responseText || `Request failed with status ${response.status}`
 
     try {
       const payload = JSON.parse(responseText) as unknown
-      if (typeof payload === 'object' && payload !== null && 'error' in payload) {
+      if (typeof payload === 'object' && payload !== null && 'detail' in payload) {
+        const detail = (payload as { detail: unknown }).detail
+        if (typeof detail === 'object' && detail !== null && 'message' in detail) {
+          message = String((detail as { message: unknown }).message)
+        } else if (typeof detail === 'string') {
+          message = detail
+        }
+      } else if (typeof payload === 'object' && payload !== null && 'error' in payload) {
         message = String(payload.error)
       }
     } catch {
@@ -370,8 +334,6 @@ async function fetchReportPdf(fileName: string, params: PdfExportParams): Promis
 
     throw new ApiRequestError(message, response.status, responseText)
   }
-
-  return response.blob()
 }
 
 function App() {
@@ -397,26 +359,10 @@ function App() {
   const [hasAttemptedAutoLoadAnalyzerNamespaces, setHasAttemptedAutoLoadAnalyzerNamespaces] = useState(false)
   const [mode, setMode] = useState<AnalysisMode>('predictive')
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
-  const [isDeleteReportsModalOpen, setIsDeleteReportsModalOpen] = useState(false)
   const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
   const [analyzerReports, setAnalyzerReports] = useState<AnalyzerReportFile[]>([])
   const [isLoadingAnalyzerReports, setIsLoadingAnalyzerReports] = useState(false)
   const [analyzerReportsError, setAnalyzerReportsError] = useState<string | null>(null)
-  const [selectedAnalyzerReport, setSelectedAnalyzerReport] = useState<AnalyzerReportFile | null>(null)
-  const [analyzerReportContent, setAnalyzerReportContent] = useState('')
-  const [isLoadingAnalyzerReportContent, setIsLoadingAnalyzerReportContent] = useState(false)
-  const [analyzerReportContentError, setAnalyzerReportContentError] = useState<string | null>(null)
-  const [reportSaveStatus, setReportSaveStatus] = useState<ReportSaveStatus>('idle')
-  const [reportSaveError, setReportSaveError] = useState<string | null>(null)
-  const [isExportingReportPdf, setIsExportingReportPdf] = useState(false)
-  const [reportPdfError, setReportPdfError] = useState<string | null>(null)
-  const [isReportPdfModalOpen, setIsReportPdfModalOpen] = useState(false)
-  const [pdfExportParams, setPdfExportParams] = useState<PdfExportParams>(createInitialPdfExportParams)
-  const [reportPdfValidationError, setReportPdfValidationError] = useState<string | null>(null)
-  const lastSavedReport = useRef<{ fileName: string; content: string } | null>(null)
-  const reportLoadSequence = useRef(0)
-  const [isReportPreviewOpen, setIsReportPreviewOpen] = useState(false)
-  const [reportPendingOpen, setReportPendingOpen] = useState<AnalyzerReportFile | null>(null)
   const [assessmentTree, setAssessmentTree] = useState<TreeViewDataItem[]>([])
   const [isLoadingAssessmentTree, setIsLoadingAssessmentTree] = useState(false)
   const [assessmentTreeError, setAssessmentTreeError] = useState<string | null>(null)
@@ -439,7 +385,6 @@ function App() {
   const [collectResponse, setCollectResponse] = useState<ApiResponseState>(initialResponseState)
   const [cleanupAssessmentResponse, setCleanupAssessmentResponse] = useState<ApiResponseState>(initialResponseState)
   const [, setRunResponse] = useState<ApiResponseState>(initialResponseState)
-  const [cleanupReportsResponse, setCleanupReportsResponse] = useState<ApiResponseState>(initialResponseState)
 
   const mastheadLogo = dashboardLogo
   const collectionCompleted = hasCollectionStarted && !isCollectionInProgress && !collectResponse.error
@@ -451,10 +396,6 @@ function App() {
   useAutoDismissMessage(loadNamespacesError, () => setLoadNamespacesError(null))
   useAutoDismissMessage(loadAnalyzerNamespacesError, () => setLoadAnalyzerNamespacesError(null))
   useAutoDismissMessage(analyzerReportsError, () => setAnalyzerReportsError(null))
-  useAutoDismissMessage(analyzerReportContentError, () => setAnalyzerReportContentError(null))
-  useAutoDismissMessage(reportSaveError, () => setReportSaveError(null))
-  useAutoDismissMessage(reportPdfError, () => setReportPdfError(null))
-  useAutoDismissMessage(reportPdfValidationError, () => setReportPdfValidationError(null))
   useAutoDismissMessage(assessmentTreeError, () => setAssessmentTreeError(null))
   useAutoDismissMessage(collectionStatusError, () => setCollectionStatusError(null))
   useAutoDismissMessage(analyzerStatusError, () => setAnalyzerStatusError(null))
@@ -536,11 +477,14 @@ function App() {
     // The dashboard cannot be used until the system settings record is created at least once.
     void (async () => {
       try {
-        const exists = await fetchSystemSettingsExists()
-        setIsSystemConfigured(exists)
-        if (!exists) {
+        const settings = await fetchSystemSettings()
+        setIsSystemConfigured(settings !== null)
+        if (!settings) {
           setActiveMenu('configurations')
+          return
         }
+
+        setMode(settings.defaultExtractionMethod === 'ml' ? 'predictive' : 'generative')
       } catch {
         setIsSystemConfigured(null)
       }
@@ -549,6 +493,9 @@ function App() {
 
   function handleSettingsChange(settings: SystemSettings | null) {
     setIsSystemConfigured(settings !== null)
+    if (settings) {
+      setMode(settings.defaultExtractionMethod === 'ml' ? 'predictive' : 'generative')
+    }
   }
 
   async function loadAnalyzerNamespaces() {
@@ -580,210 +527,16 @@ function App() {
       const result = await executeRequest('GET', ANALYZER_REPORT_FILES_PATH)
       const parsedReports = normalizeAnalyzerReports(result.payload)
       setAnalyzerReports(parsedReports)
-
-      if (
-        selectedAnalyzerReport
-        && !parsedReports.some((report) => report.name === selectedAnalyzerReport.name)
-      ) {
-        resetAnalyzerReportViewer()
-      }
     } catch (error) {
       setAnalyzerReportsError(error instanceof Error ? error.message : 'Could not load report files.')
       setAnalyzerReports([])
-      resetAnalyzerReportViewer()
     } finally {
       setIsLoadingAnalyzerReports(false)
     }
   }
 
-  async function openAnalyzerReport(report: AnalyzerReportFile) {
-    const loadSequence = ++reportLoadSequence.current
-    setSelectedAnalyzerReport(report)
-    setAnalyzerReportContent('')
-    setAnalyzerReportContentError(null)
-    setReportSaveStatus('idle')
-    setReportSaveError(null)
-    setReportPdfError(null)
-    setReportPdfValidationError(null)
-    setIsReportPdfModalOpen(false)
-    lastSavedReport.current = null
-    setIsLoadingAnalyzerReportContent(true)
-
-    try {
-      const content = await fetchReportContent(report.name)
-      if (loadSequence !== reportLoadSequence.current) {
-        return
-      }
-      lastSavedReport.current = { fileName: report.name, content }
-      setAnalyzerReportContent(content)
-    } catch (error) {
-      if (loadSequence !== reportLoadSequence.current) {
-        return
-      }
-      setAnalyzerReportContentError(
-        error instanceof Error ? error.message : 'Could not load the report.',
-      )
-    } finally {
-      if (loadSequence === reportLoadSequence.current) {
-        setIsLoadingAnalyzerReportContent(false)
-      }
-    }
-  }
-
-  function hasUnsavedReportChanges(): boolean {
-    return Boolean(
-      selectedAnalyzerReport
-      && lastSavedReport.current?.fileName === selectedAnalyzerReport.name
-      && lastSavedReport.current.content !== analyzerReportContent,
-    )
-  }
-
-  function requestOpenAnalyzerReport(report: AnalyzerReportFile) {
-    if (selectedAnalyzerReport?.name === report.name) {
-      return
-    }
-
-    if (hasUnsavedReportChanges()) {
-      setReportPendingOpen(report)
-      return
-    }
-
-    void openAnalyzerReport(report)
-  }
-
-  function discardAndOpenPendingReport() {
-    if (!reportPendingOpen) {
-      return
-    }
-
-    const report = reportPendingOpen
-    setReportPendingOpen(null)
-    void openAnalyzerReport(report)
-  }
-
-  useEffect(() => {
-    if (
-      !selectedAnalyzerReport
-      || isLoadingAnalyzerReportContent
-      || analyzerReportContentError
-      || (
-        lastSavedReport.current?.fileName === selectedAnalyzerReport.name
-        && lastSavedReport.current.content === analyzerReportContent
-      )
-    ) {
-      return
-    }
-
-    const abortController = new AbortController()
-    const fileName = selectedAnalyzerReport.name
-    const content = analyzerReportContent
-    const saveTimeout = window.setTimeout(() => {
-      setReportSaveStatus('saving')
-      setReportSaveError(null)
-
-      void saveReportContent(fileName, content, abortController.signal)
-        .then(() => {
-          if (!abortController.signal.aborted) {
-            lastSavedReport.current = { fileName, content }
-            setReportSaveStatus('saved')
-          }
-        })
-        .catch((error: unknown) => {
-          if (!abortController.signal.aborted) {
-            setReportSaveStatus('error')
-            setReportSaveError(error instanceof Error ? error.message : 'Could not save the report.')
-          }
-        })
-    }, 2000)
-
-    return () => {
-      window.clearTimeout(saveTimeout)
-      abortController.abort()
-    }
-  }, [
-    selectedAnalyzerReport,
-    analyzerReportContent,
-    isLoadingAnalyzerReportContent,
-    analyzerReportContentError,
-  ])
-
   function openAnalyzerReports() {
     setActiveMenu('reports')
-  }
-
-  function resetAnalyzerReportViewer() {
-    reportLoadSequence.current += 1
-    setReportPendingOpen(null)
-    lastSavedReport.current = null
-    setSelectedAnalyzerReport(null)
-    setAnalyzerReportContent('')
-    setIsLoadingAnalyzerReportContent(false)
-    setAnalyzerReportContentError(null)
-    setReportSaveStatus('idle')
-    setReportSaveError(null)
-    setReportPdfError(null)
-    setReportPdfValidationError(null)
-    setIsReportPreviewOpen(false)
-    setIsReportPdfModalOpen(false)
-  }
-
-  function updatePdfExportParam(field: keyof PdfExportParams, value: string) {
-    setPdfExportParams((previousValue) => ({
-      ...previousValue,
-      [field]: value,
-    }))
-  }
-
-  function openReportPdfModal() {
-    if (!selectedAnalyzerReport) {
-      return
-    }
-
-    setReportPdfError(null)
-    setReportPdfValidationError(null)
-    setIsReportPdfModalOpen(true)
-  }
-
-  async function exportSelectedReportPdf(params: PdfExportParams) {
-    if (!selectedAnalyzerReport) {
-      return
-    }
-
-    const normalizedParams: PdfExportParams = {
-      customer: params.customer.trim(),
-      description: params.description.trim(),
-      version: params.version.trim(),
-      status: params.status.trim(),
-      author: params.author.trim(),
-      projectManager: params.projectManager.trim(),
-    }
-
-    const hasEmptyRequiredField = Object.values(normalizedParams).some((value) => value.length === 0)
-    if (hasEmptyRequiredField) {
-      setReportPdfValidationError('All PDF parameters are required.')
-      return
-    }
-
-    setIsExportingReportPdf(true)
-    setReportPdfError(null)
-    setReportPdfValidationError(null)
-
-    try {
-      const pdf = await fetchReportPdf(selectedAnalyzerReport.name, normalizedParams)
-      const downloadUrl = URL.createObjectURL(pdf)
-      const downloadLink = document.createElement('a')
-      downloadLink.href = downloadUrl
-      downloadLink.download = selectedAnalyzerReport.name.replace(/\.md$/i, '') + '.pdf'
-      document.body.appendChild(downloadLink)
-      downloadLink.click()
-      downloadLink.remove()
-      URL.revokeObjectURL(downloadUrl)
-      setIsReportPdfModalOpen(false)
-    } catch (error) {
-      setReportPdfError(error instanceof Error ? error.message : 'Could not export the report as PDF.')
-    } finally {
-      setIsExportingReportPdf(false)
-    }
   }
 
   useEffect(() => {
@@ -805,7 +558,6 @@ function App() {
 
   useEffect(() => {
     if (activeMenu === 'harvester') {
-      setIsDeleteReportsModalOpen(false)
       void loadNamespaces()
       return
     }
@@ -814,7 +566,7 @@ function App() {
     setIsAssessmentFilesModalOpen(false)
     if (activeMenu === 'analyzer') {
       void loadAnalyzerNamespaces()
-    } else {
+    } else if (activeMenu === 'reports') {
       void loadAnalyzerReports()
     }
   }, [activeMenu])
@@ -1220,35 +972,6 @@ function App() {
       setHasAnalyzerStarted(false)
       setIsAnalyzerInProgress(false)
       setRunResponse({
-        pending: false,
-        statusCode: null,
-        payload: null,
-        error: error instanceof Error ? error.message : 'Unknown request error',
-      })
-    }
-  }
-
-  async function handleCleanupReports() {
-    setIsDeleteReportsModalOpen(false)
-    setCleanupReportsResponse((previousState) => ({
-      ...previousState,
-      pending: true,
-      error: null,
-    }))
-
-    try {
-      const result = await executeRequest('DELETE', ANALYZER_CLEANUP_PATH)
-      resetAnalyzerReportViewer()
-      setAnalyzerReports([])
-      setCleanupReportsResponse({
-        pending: false,
-        statusCode: result.statusCode,
-        payload: result.payload,
-        error: null,
-      })
-      void loadAnalyzerReports()
-    } catch (error) {
-      setCleanupReportsResponse({
         pending: false,
         statusCode: null,
         payload: null,
@@ -1676,7 +1399,7 @@ function App() {
                         <Radio
                           id="mode-predictive"
                           name="mode"
-                          label="Predictive AI"
+                          label="Machine Learning"
                           isChecked={mode === 'predictive'}
                           onChange={() => setMode('predictive')}
                         />
@@ -1685,7 +1408,7 @@ function App() {
                         <Radio
                           id="mode-generative"
                           name="mode"
-                          label="Generative AI"
+                          label="LLM"
                           isChecked={mode === 'generative'}
                           onChange={() => setMode('generative')}
                         />
@@ -1693,15 +1416,6 @@ function App() {
                     </Flex>
                   </FormGroup>
                   <div className="collect-run-actions">
-                    <Button
-                      type="button"
-                      variant="danger"
-                      icon={<TrashIcon />}
-                      onClick={() => setIsDeleteReportsModalOpen(true)}
-                      isDisabled={isAnalyzerInProgress || cleanupReportsResponse.pending}
-                    >
-                      {cleanupReportsResponse.pending ? <Spinner size="md" /> : 'DELETE ALL'}
-                    </Button>
                     <Button
                       type="submit"
                       className="collect-run-button"
@@ -1749,271 +1463,17 @@ function App() {
               </CardBody>
             </Card>
           </PageSection>
-
-          <Modal
-            variant={ModalVariant.small}
-            isOpen={isDeleteReportsModalOpen}
-            onClose={() => setIsDeleteReportsModalOpen(false)}
-          >
-            <ModalHeader title="Do you want to perform this action?" labelId="delete-reports-modal-title" />
-            <ModalBody id="delete-reports-modal-description">
-              This action will remove all analyzer reports.
-            </ModalBody>
-            <ModalFooter>
-              <Button variant="danger" onClick={handleCleanupReports} isLoading={cleanupReportsResponse.pending}>
-                Yes, run
-              </Button>
-              <Button variant="link" onClick={() => setIsDeleteReportsModalOpen(false)}>
-                Cancel
-              </Button>
-            </ModalFooter>
-          </Modal>
         </>
       ) : (
-        <PageSection>
-          <Card className="pf-v5-c-card">
-            <CardHeader>
-              <div className="reports-page-heading">
-                <Title headingLevel="h2" size="xl">Reports Analyzer</Title>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={loadAnalyzerReports}
-                  isDisabled={isLoadingAnalyzerReports || isAnalyzerInProgress}
-                >
-                  {isLoadingAnalyzerReports ? 'Refreshing...' : 'Refresh'}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardBody>
-              {analyzerReportsError ? (
-                <Alert isInline variant="warning" title="Could not update report files">
-                  {analyzerReportsError}
-                </Alert>
-              ) : null}
-              <div className="reports-workspace">
-                <div className="reports-list-panel">
-                  {isLoadingAnalyzerReports ? (
-                    <div className="assessment-tree-loading">
-                      <Spinner size="lg" aria-label="Loading analyzer reports" />
-                    </div>
-                  ) : null}
-                  {!isLoadingAnalyzerReports && !analyzerReportsError && analyzerReports.length === 0 ? (
-                    <small>No reports found.</small>
-                  ) : null}
-                  {!isLoadingAnalyzerReports && analyzerReports.length > 0 ? (
-                    <Menu className="report-files-menu" aria-label="Analyzer report files">
-                      <MenuContent>
-                        <MenuList>
-                          {analyzerReports.map((report) => (
-                            <MenuItem
-                              key={report.name}
-                              itemId={report.name}
-                              isSelected={selectedAnalyzerReport?.name === report.name}
-                              icon={<FileAltIcon />}
-                              description={report.createdAt ?? undefined}
-                              onClick={() => requestOpenAnalyzerReport(report)}
-                            >
-                              {report.name}
-                            </MenuItem>
-                          ))}
-                        </MenuList>
-                      </MenuContent>
-                    </Menu>
-                  ) : null}
-                </div>
-                <section className="report-editor-panel" aria-live="polite">
-                  <div className="report-editor-heading">
-                    <Title headingLevel="h3" size="lg">
-                      {selectedAnalyzerReport?.name ?? 'Select a report'}
-                    </Title>
-                    {selectedAnalyzerReport && !isLoadingAnalyzerReportContent && !analyzerReportContentError ? (
-                      <div className="report-editor-actions">
-                        <small className={`report-save-status report-save-status--${reportSaveStatus}`} role="status">
-                          {reportSaveStatus === 'pending' ? 'Waiting to save' : null}
-                          {reportSaveStatus === 'saving' ? 'Saving...' : null}
-                          {reportSaveStatus === 'saved' ? 'Saved' : null}
-                          {reportSaveStatus === 'error' ? 'Save failed' : null}
-                        </small>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          icon={<EyeIcon />}
-                          onClick={() => setIsReportPreviewOpen(true)}
-                        >
-                          View
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                  {isLoadingAnalyzerReportContent ? (
-                    <div className="report-editor-loading">
-                      <Spinner size="lg" aria-label="Loading analyzer report" />
-                    </div>
-                  ) : null}
-                  {analyzerReportContentError ? (
-                    <Alert isInline variant="danger" title="Could not load the report">
-                      {analyzerReportContentError}
-                    </Alert>
-                  ) : null}
-                  {reportSaveError ? (
-                    <Alert isInline variant="danger" title="Could not save the report">
-                      {reportSaveError}
-                    </Alert>
-                  ) : null}
-                  {!selectedAnalyzerReport ? (
-                    <p className="report-editor-empty">Choose a report from the menu to edit its Markdown content.</p>
-                  ) : null}
-                  {selectedAnalyzerReport && !isLoadingAnalyzerReportContent && !analyzerReportContentError ? (
-                    <TextArea
-                      className="report-markdown-editor"
-                      id="report-markdown-editor"
-                      aria-label="Markdown report editor"
-                      value={analyzerReportContent}
-                      onChange={(_event, value) => {
-                        setAnalyzerReportContent(value)
-                        setReportSaveStatus(
-                          lastSavedReport.current?.fileName === selectedAnalyzerReport.name
-                          && lastSavedReport.current.content === value
-                            ? 'saved'
-                            : 'pending',
-                        )
-                        setReportSaveError(null)
-                      }}
-                      resizeOrientation="vertical"
-                    />
-                  ) : null}
-                </section>
-              </div>
-            </CardBody>
-          </Card>
-          <Modal
-            className="report-preview-modal"
-            width="min(76rem, 94vw)"
-            isOpen={isReportPreviewOpen}
-            onClose={() => setIsReportPreviewOpen(false)}
-          >
-            <ModalHeader
-              title={selectedAnalyzerReport?.name ?? 'Report preview'}
-              labelId="report-preview-modal-title"
-            />
-            <ModalBody id="report-preview-modal-description">
-              {reportPdfError ? (
-                <Alert isInline variant="danger" title="Could not export the report as PDF">
-                  {reportPdfError}
-                </Alert>
-              ) : null}
-              <MarkdownViewer content={analyzerReportContent} />
-            </ModalBody>
-            <ModalFooter>
-              <Button
-                type="button"
-                variant="primary"
-                icon={<FilePdfIcon />}
-                onClick={openReportPdfModal}
-                isLoading={isExportingReportPdf}
-                isDisabled={reportSaveStatus === 'pending' || reportSaveStatus === 'saving'}
-              >
-                Export PDF
-              </Button>
-              <Button variant="link" onClick={() => setIsReportPreviewOpen(false)}>Close</Button>
-            </ModalFooter>
-          </Modal>
-          <Modal
-            variant={ModalVariant.medium}
-            isOpen={isReportPdfModalOpen}
-            onClose={() => setIsReportPdfModalOpen(false)}
-          >
-            <ModalHeader title="PDF parameters" labelId="report-pdf-parameters-modal-title" />
-            <ModalBody id="report-pdf-parameters-modal-description">
-              {reportPdfValidationError ? (
-                <Alert isInline variant="warning" title={reportPdfValidationError} />
-              ) : null}
-              {reportPdfError ? (
-                <Alert isInline variant="danger" title="Could not export the report as PDF">
-                  {reportPdfError}
-                </Alert>
-              ) : null}
-              <Form>
-                <FormGroup label="Customer" isRequired fieldId="pdf-customer">
-                  <TextInput
-                    id="pdf-customer"
-                    value={pdfExportParams.customer}
-                    onChange={(_event, value) => updatePdfExportParam('customer', value)}
-                  />
-                </FormGroup>
-                <FormGroup label="Description" isRequired fieldId="pdf-description">
-                  <TextArea
-                    id="pdf-description"
-                    value={pdfExportParams.description}
-                    onChange={(_event, value) => updatePdfExportParam('description', value)}
-                    resizeOrientation="vertical"
-                  />
-                </FormGroup>
-                <FormGroup label="Version" isRequired fieldId="pdf-version">
-                  <TextInput
-                    id="pdf-version"
-                    value={pdfExportParams.version}
-                    onChange={(_event, value) => updatePdfExportParam('version', value)}
-                  />
-                </FormGroup>
-                <FormGroup label="Status" isRequired fieldId="pdf-status">
-                  <TextInput
-                    id="pdf-status"
-                    value={pdfExportParams.status}
-                    onChange={(_event, value) => updatePdfExportParam('status', value)}
-                  />
-                </FormGroup>
-                <FormGroup label="Author" isRequired fieldId="pdf-author">
-                  <TextInput
-                    id="pdf-author"
-                    value={pdfExportParams.author}
-                    onChange={(_event, value) => updatePdfExportParam('author', value)}
-                  />
-                </FormGroup>
-                <FormGroup label="Project manager" isRequired fieldId="pdf-project-manager">
-                  <TextInput
-                    id="pdf-project-manager"
-                    value={pdfExportParams.projectManager}
-                    onChange={(_event, value) => updatePdfExportParam('projectManager', value)}
-                  />
-                </FormGroup>
-              </Form>
-            </ModalBody>
-            <ModalFooter>
-              <Button
-                type="button"
-                variant="primary"
-                icon={<FilePdfIcon />}
-                onClick={() => void exportSelectedReportPdf(pdfExportParams)}
-                isLoading={isExportingReportPdf}
-              >
-                Generate PDF
-              </Button>
-              <Button variant="link" onClick={() => setIsReportPdfModalOpen(false)} isDisabled={isExportingReportPdf}>
-                Cancel
-              </Button>
-            </ModalFooter>
-          </Modal>
-          <Modal
-            variant={ModalVariant.small}
-            isOpen={reportPendingOpen !== null}
-            onClose={() => setReportPendingOpen(null)}
-          >
-            <ModalHeader title="Unsaved report changes" labelId="report-switch-modal-title" />
-            <ModalBody id="report-switch-modal-description">
-              The current report has changes that have not been saved. Opening another report will discard them.
-            </ModalBody>
-            <ModalFooter>
-              <Button variant="danger" onClick={discardAndOpenPendingReport}>
-                Discard and open
-              </Button>
-              <Button variant="link" onClick={() => setReportPendingOpen(null)}>
-                Cancel
-              </Button>
-            </ModalFooter>
-          </Modal>
-        </PageSection>
+        <DocumentDependenciesPage
+          reports={analyzerReports satisfies DocumentReport[]}
+          isLoadingReports={isLoadingAnalyzerReports}
+          reportsError={analyzerReportsError}
+          onRefreshReports={loadAnalyzerReports}
+          fetchReportContent={fetchReportContent}
+          saveReportContent={(fileName, content) => saveReportContent(fileName, content, new AbortController().signal)}
+          deleteReportContent={deleteReportContent}
+        />
       )}
     </Page>
   )
