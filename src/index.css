@@ -265,6 +265,34 @@ body {
   margin-top: 0.5rem;
 }
 
+.settings-logo-preview {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 8px;
+}
+
+.settings-logo-preview-image {
+  max-width: 160px;
+  max-height: 80px;
+  object-fit: contain;
+}
+
+.settings-logo-preview-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.settings-logo-preview-caption {
+  font-size: 0.875rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
 .section-title {
   display: flex;
   align-items: center;

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import {
   Alert,
   Button,
@@ -12,8 +12,11 @@ import {
   DescriptionListTerm,
   Form,
   FormGroup,
+  FormHelperText,
   FormSelect,
   FormSelectOption,
+  HelperText,
+  HelperTextItem,
   Modal,
   ModalBody,
   ModalFooter,
@@ -26,8 +29,12 @@ import {
 } from '@patternfly/react-core'
 import {
   createSystemSettings,
+  deleteSystemLogo,
+  fetchSystemLogoUrl,
   fetchSystemSettings,
   updateSystemSettings,
+  uploadSystemLogo,
+  validateLogoFile,
   type ExtractionMethod,
   type Language,
   type SettingsStatus,
@@ -89,10 +96,33 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [storedLogoUrl, setStoredLogoUrl] = useState<string | null>(null)
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
+  const [pendingLogoUrl, setPendingLogoUrl] = useState<string | null>(null)
+  const [logoError, setLogoError] = useState<string | null>(null)
+  const [isRemovingLogo, setIsRemovingLogo] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     void loadSettings()
   }, [])
+
+  // Object URLs must be revoked to avoid leaking the decoded image in memory.
+  useEffect(() => {
+    return () => {
+      if (pendingLogoUrl) {
+        URL.revokeObjectURL(pendingLogoUrl)
+      }
+    }
+  }, [pendingLogoUrl])
+
+  useEffect(() => {
+    return () => {
+      if (storedLogoUrl) {
+        URL.revokeObjectURL(storedLogoUrl)
+      }
+    }
+  }, [storedLogoUrl])
 
   async function loadSettings() {
     setIsLoading(true)
@@ -103,10 +133,105 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
       setSettings(result)
       setFormState(result ? toFormState(result) : createEmptyFormState())
       onSettingsChange(result)
+      await refreshStoredLogo(result)
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Could not load system settings.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function refreshStoredLogo(currentSettings: SystemSettings | null) {
+    replaceStoredLogoUrl(null)
+
+    if (!currentSettings?.hasLogo) {
+      return
+    }
+
+    try {
+      replaceStoredLogoUrl(await fetchSystemLogoUrl())
+    } catch {
+      setLogoError('Could not load the stored logo.')
+    }
+  }
+
+  function replaceStoredLogoUrl(nextUrl: string | null) {
+    setStoredLogoUrl((previousUrl) => {
+      if (previousUrl) {
+        URL.revokeObjectURL(previousUrl)
+      }
+      return nextUrl
+    })
+  }
+
+  function clearPendingLogo() {
+    setPendingLogoUrl((previousUrl) => {
+      if (previousUrl) {
+        URL.revokeObjectURL(previousUrl)
+      }
+      return null
+    })
+    setPendingLogoFile(null)
+    setLogoError(null)
+
+    if (logoInputRef.current) {
+      logoInputRef.current.value = ''
+    }
+  }
+
+  function handleLogoSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      clearPendingLogo()
+      return
+    }
+
+    const validationError = validateLogoFile(file)
+
+    if (validationError) {
+      clearPendingLogo()
+      setLogoError(validationError)
+      return
+    }
+
+    setLogoError(null)
+    setPendingLogoFile(file)
+    setPendingLogoUrl((previousUrl) => {
+      if (previousUrl) {
+        URL.revokeObjectURL(previousUrl)
+      }
+      return URL.createObjectURL(file)
+    })
+  }
+
+  // The logo endpoint requires an existing settings record, so it runs after the record is saved.
+  async function persistPendingLogo(savedSettings: SystemSettings): Promise<SystemSettings> {
+    if (!pendingLogoFile) {
+      return savedSettings
+    }
+
+    const updated = await uploadSystemLogo(pendingLogoFile)
+    clearPendingLogo()
+    return updated
+  }
+
+  async function handleRemoveStoredLogo() {
+    setIsRemovingLogo(true)
+    setLogoError(null)
+
+    try {
+      await deleteSystemLogo()
+      replaceStoredLogoUrl(null)
+      setSettings((previousSettings) => {
+        const next = previousSettings ? { ...previousSettings, hasLogo: false } : previousSettings
+        onSettingsChange(next ?? null)
+        return next
+      })
+    } catch (error) {
+      setLogoError(error instanceof Error ? error.message : 'Could not remove the logo.')
+    } finally {
+      setIsRemovingLogo(false)
     }
   }
 
@@ -120,10 +245,11 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
     setSaveError(null)
 
     try {
-      const created = await createSystemSettings(formState)
+      const created = await persistPendingLogo(await createSystemSettings(formState))
       setSettings(created)
       setFormState(toFormState(created))
       onSettingsChange(created)
+      await refreshStoredLogo(created)
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Could not save system settings.')
     } finally {
@@ -137,10 +263,11 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
     setSaveError(null)
 
     try {
-      const updated = await updateSystemSettings(formState)
+      const updated = await persistPendingLogo(await updateSystemSettings(formState))
       setSettings(updated)
       setFormState(toFormState(updated))
       onSettingsChange(updated)
+      await refreshStoredLogo(updated)
       setIsEditModalOpen(false)
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Could not update system settings.')
@@ -155,7 +282,57 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
     }
     setFormState(toFormState(settings))
     setSaveError(null)
+    clearPendingLogo()
     setIsEditModalOpen(true)
+  }
+
+  function renderLogoField() {
+    const previewUrl = pendingLogoUrl ?? storedLogoUrl
+
+    return (
+      <FormGroup label="Logo" fieldId="settings-logo">
+        <input
+          id="settings-logo"
+          ref={logoInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          onChange={handleLogoSelected}
+        />
+        <FormHelperText>
+          <HelperText>
+            <HelperTextItem variant={logoError ? 'error' : 'default'}>
+              {logoError ?? 'PNG, JPEG, WEBP or SVG up to 2 MB. The image is uploaded when the settings are saved.'}
+            </HelperTextItem>
+          </HelperText>
+        </FormHelperText>
+        {previewUrl ? (
+          <div className="settings-logo-preview">
+            <img src={previewUrl} alt="System logo preview" className="settings-logo-preview-image" />
+            <div className="settings-logo-preview-actions">
+              <span className="settings-logo-preview-caption">
+                {pendingLogoUrl ? `Preview: ${pendingLogoFile?.name ?? 'selected image'} (not saved yet)` : 'Current logo'}
+              </span>
+              {pendingLogoUrl ? (
+                <Button variant="link" isInline onClick={clearPendingLogo} isDisabled={isSaving}>
+                  Discard selection
+                </Button>
+              ) : (
+                <Button
+                  variant="link"
+                  isInline
+                  isDanger
+                  onClick={() => void handleRemoveStoredLogo()}
+                  isLoading={isRemovingLogo}
+                  isDisabled={isRemovingLogo || isSaving}
+                >
+                  Remove logo
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </FormGroup>
+    )
   }
 
   function renderFormFields() {
@@ -224,6 +401,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
             ))}
           </FormSelect>
         </FormGroup>
+        {renderLogoField()}
       </>
     )
   }
@@ -298,6 +476,16 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
               <DescriptionListGroup>
                 <DescriptionListTerm>Status</DescriptionListTerm>
                 <DescriptionListDescription>{settings.status}</DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>Logo</DescriptionListTerm>
+                <DescriptionListDescription>
+                  {storedLogoUrl ? (
+                    <img src={storedLogoUrl} alt="System logo" className="settings-logo-preview-image" />
+                  ) : (
+                    'No logo uploaded'
+                  )}
+                </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>Created at</DescriptionListTerm>
