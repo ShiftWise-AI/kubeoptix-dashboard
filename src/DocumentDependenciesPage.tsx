@@ -292,8 +292,9 @@ function DocumentDependenciesPage({
       // Once the content is versioned in the database, the raw file on disk is no longer needed.
       try {
         await deleteReportContent(selectedReportName)
-      } catch {
+      } catch (deleteError) {
         // Non-fatal: the document is already versioned even if the disk copy could not be removed.
+        console.warn('Could not delete report file from disk after versioning:', deleteError)
       }
       await loadDbReportBaseNames()
       onRefreshReports()
