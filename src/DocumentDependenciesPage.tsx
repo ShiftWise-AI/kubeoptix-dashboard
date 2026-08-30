@@ -10,6 +10,7 @@ import {
   fetchAllDocumentBaseNames,
   fetchDocumentDependencies,
   fetchExistingDocument,
+  fetchReportPdf,
   saveDocument,
   type Person,
 } from './services/documentVersionService'
@@ -49,6 +50,7 @@ type SavedDocumentForExport = {
 // Snapshot of the last saved state for the selected report's document, used to detect edits.
 type DocumentBaseline = {
   title: string
+  description: string
   projectManager: string
   costumer: string
   authorIds: string[]
@@ -86,6 +88,7 @@ function DocumentDependenciesPage({
   const [isSaving, setIsSaving] = useState(false)
   const [deletingPersonId, setDeletingPersonId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [projectManager, setProjectManager] = useState('')
   const [costumer, setCostumer] = useState('')
   // Author and Costumers list are multi-valued: the API only stores one authorId/costumersListId
@@ -100,7 +103,7 @@ function DocumentDependenciesPage({
   const [isSavingDocument, setIsSavingDocument] = useState(false)
   const [documentMessage, setDocumentMessage] = useState<string | null>(null)
   const [savedDocumentForExport, setSavedDocumentForExport] = useState<SavedDocumentForExport | null>(null)
-  const [isExportingPdf] = useState(false)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [pdfExportError, setPdfExportError] = useState<string | null>(null)
   const [baseline, setBaseline] = useState<DocumentBaseline | null>(null)
   const [isCheckingExistingDocument, setIsCheckingExistingDocument] = useState(false)
@@ -237,7 +240,7 @@ function DocumentDependenciesPage({
   }
 
   async function submitDocument() {
-    if (!title.trim() || !projectManager.trim() || !costumer.trim() || authorIds.length === 0 || costumersListIds.length === 0 || !selectedReportName || !markdownContent.trim()) {
+    if (!title.trim() || !description.trim() || !projectManager.trim() || !costumer.trim() || authorIds.length === 0 || costumersListIds.length === 0 || !selectedReportName || !markdownContent.trim()) {
       setDocumentMessage('Complete all document fields (select at least one author and one customer) before saving.')
       return
     }
@@ -255,6 +258,7 @@ function DocumentDependenciesPage({
       const nextVersion = await saveDocument({
         documentName,
         title: title.trim(),
+        description: description.trim(),
         projectManager: projectManager.trim(),
         costumer: costumer.trim(),
         authorIds,
@@ -268,7 +272,7 @@ function DocumentDependenciesPage({
       setSavedDocumentForExport({
         fileName: selectedReportName,
         customer: costumer.trim(),
-        description: title.trim(),
+        description: description.trim(),
         version: nextVersion,
         author: selectedAuthorNames,
         projectManager: projectManager.trim(),
@@ -276,6 +280,7 @@ function DocumentDependenciesPage({
       // The just-saved state becomes the new baseline, so Save disables again until the next edit.
       setBaseline({
         title: title.trim(),
+        description: description.trim(),
         projectManager: projectManager.trim(),
         costumer: costumer.trim(),
         authorIds,
@@ -305,13 +310,34 @@ function DocumentDependenciesPage({
     }
   }
 
-  // TODO: rework to fetch the PDF source from the database instead of the (now disk-deleted) report file.
+  // The report file may already be gone from disk after versioning, so the current markdown
+  // content (from the DB / editor state) is submitted directly; the file name is the only key.
   async function exportSavedDocumentPdf() {
     if (!savedDocumentForExport) {
       return
     }
 
-    setPdfExportError('PDF export is being reworked to read from the database and is temporarily unavailable.')
+    setIsExportingPdf(true)
+    setPdfExportError(null)
+    try {
+      const pdfBlob = await fetchReportPdf(
+        savedDocumentForExport.fileName,
+        markdownContent,
+        savedDocumentForExport.version,
+      )
+      const downloadUrl = URL.createObjectURL(pdfBlob)
+      const downloadLink = document.createElement('a')
+      downloadLink.href = downloadUrl
+      downloadLink.download = savedDocumentForExport.fileName.replace(/\.md$/i, '.pdf')
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      URL.revokeObjectURL(downloadUrl)
+    } catch (exportError) {
+      setPdfExportError(exportError instanceof Error ? exportError.message : 'Could not export the report as PDF.')
+    } finally {
+      setIsExportingPdf(false)
+    }
   }
 
   function downloadMarkdown() {
@@ -383,6 +409,7 @@ function DocumentDependenciesPage({
     if (!reportName) {
       setDocumentName('')
       setTitle('')
+      setDescription('')
       setProjectManager('')
       setCostumer('')
       setAuthorIds([])
@@ -395,6 +422,7 @@ function DocumentDependenciesPage({
     const derivedDocumentName = reportName.replace(/\.md$/i, '')
     setDocumentName(derivedDocumentName)
     setTitle(derivedDocumentName)
+    setDescription('')
     setIsLoadingMarkdown(true)
     setIsCheckingExistingDocument(true)
 
@@ -412,6 +440,7 @@ function DocumentDependenciesPage({
 
       if (existingDocument) {
         setTitle(existingDocument.title || derivedDocumentName)
+        setDescription(existingDocument.description)
         setProjectManager(existingDocument.projectManager)
         setCostumer(existingDocument.costumer)
         setAuthorIds(existingDocument.authorIds)
@@ -420,11 +449,24 @@ function DocumentDependenciesPage({
         setMarkdownContent(loadedMarkdown)
         setBaseline({
           title: existingDocument.title || derivedDocumentName,
+          description: existingDocument.description,
           projectManager: existingDocument.projectManager,
           costumer: existingDocument.costumer,
           authorIds: existingDocument.authorIds,
           costumersListIds: existingDocument.costumersListIds,
           markdownContent: loadedMarkdown,
+        })
+        // Already-saved documents can be exported right away, without requiring a fresh save.
+        setSavedDocumentForExport({
+          fileName: reportName,
+          customer: existingDocument.costumer,
+          description: existingDocument.description || existingDocument.title || derivedDocumentName,
+          version: existingDocument.versionNumber,
+          author: authors
+            .filter((author) => existingDocument.authorIds.includes(author.id))
+            .map((author) => author.name)
+            .join(', '),
+          projectManager: existingDocument.projectManager,
         })
         setDocumentMessage(
           `This document already exists (last saved version ${existingDocument.versionNumber.toFixed(1)}). `
@@ -459,6 +501,7 @@ function DocumentDependenciesPage({
   // Save is only relevant once something differs from the last loaded/saved state.
   const isDirty = !baseline
     || baseline.title !== title.trim()
+    || baseline.description !== description.trim()
     || baseline.projectManager !== projectManager.trim()
     || baseline.costumer !== costumer.trim()
     || !sameIdSet(baseline.authorIds, authorIds)
@@ -592,6 +635,7 @@ function DocumentDependenciesPage({
                   <small>Unique identifier derived from the report file name; cannot be changed.</small>
                 </FormGroup>
                 <FormGroup label="Document title" isRequired fieldId="document-title"><TextInput id="document-title" value={title} onChange={(_event, value) => setTitle(value)} /></FormGroup>
+                <FormGroup label="Description" isRequired fieldId="document-description"><TextInput id="document-description" value={description} onChange={(_event, value) => setDescription(value)} /></FormGroup>
                 <FormGroup label="Project manager" isRequired fieldId="document-project-manager"><TextInput id="document-project-manager" value={projectManager} onChange={(_event, value) => setProjectManager(value)} /></FormGroup>
                 <FormGroup label="Costumer" isRequired fieldId="document-costumer"><TextInput id="document-costumer" value={costumer} onChange={(_event, value) => setCostumer(value)} /></FormGroup>
                 <FormGroup label="Author" isRequired fieldId="document-author">

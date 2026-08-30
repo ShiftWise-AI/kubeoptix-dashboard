@@ -29,25 +29,12 @@ export type SaveDocumentInput = {
   costumer: string
   authorIds: string[]
   costumersListIds: string[]
+  // Required by VersionRequest.description on the API; distinct from the document title.
+  description: string
   markdownContent: string
 }
 
-export type ReporterPdfParams = {
-  customer: string
-  description: string
-  version: number
-  author: string
-  projectManager: string
-}
-
 const REPORTER_API_PATH = '/api/reporter'
-
-// The version scale grows in 0.1 increments (0.1, 0.2, ...) with no upper cap.
-const VERSION_INCREMENT = 0.1
-
-function roundVersion(value: number): number {
-  return Math.round(value * 10) / 10
-}
 
 function normalizePeople(payload: unknown): Person[] {
   if (!Array.isArray(payload)) {
@@ -185,60 +172,26 @@ async function fetchDocumentCombos(baseName: string): Promise<DocumentRecord[]> 
     .filter((item) => parseComboDocumentName(item.documentName)?.baseName === baseName)
 }
 
-// Checks whether a version already exists for this document (across all its author x customer
-// combos) and, if so, returns the next version number (last saved version + 0.1). Otherwise 0.1.
-export async function computeNextVersionNumber(baseName: string): Promise<number> {
-  const versionsResponse = await executeRequest('GET', SETTINGS_VERSIONS_PATH)
-  if (!Array.isArray(versionsResponse.payload)) {
-    return VERSION_INCREMENT
-  }
-
-  const matchingVersionNumbers = versionsResponse.payload
-    .map((item): number | null => {
-      if (typeof item !== 'object' || item === null) {
-        return null
-      }
-
-      const record = item as Record<string, unknown>
-      const documentName = typeof record.documentName === 'string' ? record.documentName : ''
-      if (parseComboDocumentName(documentName)?.baseName !== baseName) {
-        return null
-      }
-
-      const versionNumber = typeof record.versionNumber === 'number'
-        ? record.versionNumber
-        : Number(record.versionNumber)
-
-      return Number.isFinite(versionNumber) ? versionNumber : null
-    })
-    .filter((value): value is number => value !== null)
-
-  if (matchingVersionNumbers.length === 0) {
-    return VERSION_INCREMENT
-  }
-
-  return roundVersion(Math.max(...matchingVersionNumbers) + VERSION_INCREMENT)
-}
-
 export type ExistingDocumentSummary = {
   title: string
   projectManager: string
   costumer: string
   authorIds: string[]
   costumersListIds: string[]
+  description: string
   markdownContent: string
   versionNumber: number
 }
 
 // Finds the highest-numbered version among this base name's combo documents and returns its
-// number + markdown content (markdownContent now lives only on `versions`, not `documents`).
-async function fetchLatestVersionForBaseName(baseName: string): Promise<{ versionNumber: number; markdownContent: string } | null> {
+// number + description + markdown content (both now live only on `versions`, not `documents`).
+async function fetchLatestVersionForBaseName(baseName: string): Promise<{ versionNumber: number; description: string; markdownContent: string } | null> {
   const versionsResponse = await executeRequest('GET', SETTINGS_VERSIONS_PATH)
   if (!Array.isArray(versionsResponse.payload)) {
     return null
   }
 
-  let latest: { versionNumber: number; markdownContent: string } | null = null
+  let latest: { versionNumber: number; description: string; markdownContent: string } | null = null
   for (const item of versionsResponse.payload) {
     if (typeof item !== 'object' || item === null) {
       continue
@@ -261,6 +214,7 @@ async function fetchLatestVersionForBaseName(baseName: string): Promise<{ versio
     if (!latest || versionNumber > latest.versionNumber) {
       latest = {
         versionNumber,
+        description: typeof record.description === 'string' ? record.description : '',
         markdownContent: typeof record.markdownContent === 'string' ? record.markdownContent : '',
       }
     }
@@ -296,13 +250,17 @@ export async function fetchExistingDocument(baseName: string): Promise<ExistingD
     costumersListIds: Array.from(new Set(
       combos.map((combo) => combo.costumersListId).filter((id): id is string => id !== null),
     )),
+    description: latestVersion?.description ?? '',
     markdownContent: latestVersion?.markdownContent ?? '',
     versionNumber: latestVersion?.versionNumber ?? 0,
   }
 }
 
-// Creates or updates one document row per selected author x customer combination (all sharing
-// the base name + the same new version number), then appends a version snapshot for each combo.
+// Creates or updates one document row per selected author x customer combination, then appends
+// a version snapshot for each combo. The API now owns version numbering (see VersionsResource):
+// it auto-increments per documentName and reuses the latest version when nothing changed, so the
+// versionNumber sent here is ignored by the server — the persisted value from its response is
+// what must be trusted and surfaced to the caller.
 export async function saveDocument(input: SaveDocumentInput): Promise<number> {
   if (input.authorIds.length === 0) {
     throw new Error('Select at least one author.')
@@ -312,7 +270,11 @@ export async function saveDocument(input: SaveDocumentInput): Promise<number> {
     throw new Error('Select at least one customer.')
   }
 
-  const nextVersion = await computeNextVersionNumber(input.documentName)
+  if (!input.description.trim()) {
+    throw new Error('Description is required.')
+  }
+
+  let savedVersionNumber: number | null = null
 
   for (const authorId of input.authorIds) {
     for (const costumersListId of input.costumersListIds) {
@@ -334,17 +296,28 @@ export async function saveDocument(input: SaveDocumentInput): Promise<number> {
         await executeRequest('POST', SETTINGS_DOCUMENTS_PATH, documentPayload)
       }
 
-      // VersionRequest.versionNumber is a string field in the API (see /q/openapi), so the
-      // numeric value is formatted with a fixed 1-decimal precision before sending it.
-      await executeRequest('POST', SETTINGS_VERSIONS_PATH, {
-        versionNumber: nextVersion.toFixed(1),
+      // The backend rejects the request with 400 if `description` is missing/blank.
+      const versionResponse = await executeRequest('POST', SETTINGS_VERSIONS_PATH, {
+        description: input.description.trim(),
         markdownContent: input.markdownContent,
         documentName: comboDocumentName,
       })
+
+      const payload = versionResponse.payload as Record<string, unknown> | null
+      const versionNumber = typeof payload?.versionNumber === 'string'
+        ? Number(payload.versionNumber)
+        : null
+      if (versionNumber !== null && Number.isFinite(versionNumber)) {
+        savedVersionNumber = versionNumber
+      }
     }
   }
 
-  return nextVersion
+  if (savedVersionNumber === null) {
+    throw new Error('The API did not return a version number for the saved document.')
+  }
+
+  return savedVersionNumber
 }
 
 // Removes every author x customer combo document row saved under this base name, if any.
@@ -377,40 +350,53 @@ function getReporterReportPath(fileName: string): string {
   return `${REPORTER_API_PATH}/report/${encodeURIComponent(fileName)}`
 }
 
-function getReporterReportPdfPath(fileName: string, params: ReporterPdfParams): string {
-  const queryParams = new URLSearchParams({
-    customer: params.customer,
-    description: params.description,
-    version: String(params.version),
-    status: 'Draft',
-    author: params.author,
-  })
-  queryParams.set('project-manager', params.projectManager)
+// PUT only persists the markdown to disk (reporter API responds with {filename, status:"saved"},
+// not a PDF); the actual render lives behind GET /report/{filename}/pdf.
+async function throwOnResponseError(response: Response): Promise<never> {
+  const responseText = await response.text()
+  let message = responseText || `Request failed with status ${response.status}`
 
-  return `${getReporterReportPath(fileName)}/pdf?${queryParams.toString()}`
+  try {
+    const payload = JSON.parse(responseText) as unknown
+    if (typeof payload === 'object' && payload !== null && 'detail' in payload) {
+      message = String((payload as { detail: unknown }).detail)
+    } else if (typeof payload === 'object' && payload !== null && 'error' in payload) {
+      message = String((payload as { error: unknown }).error)
+    }
+  } catch {
+    // Keep the plain-text response as the error message.
+  }
+
+  throw new ApiRequestError(message, response.status, responseText)
 }
 
-export async function fetchReportPdf(fileName: string, params: ReporterPdfParams): Promise<Blob> {
-  const response = await fetch(getReporterReportPdfPath(fileName, params), {
+// Re-writes the report file to disk (it may have been deleted after being versioned in the DB,
+// and the pdf endpoint retrieves the selected version from configurations-api) then fetches the PDF blob.
+export async function fetchReportPdf(
+  fileName: string,
+  markdownContent: string,
+  versionNumber: number,
+): Promise<Blob> {
+  const saveResponse = await fetch(getReporterReportPath(fileName), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/markdown' },
+    body: markdownContent,
+  })
+
+  if (!saveResponse.ok) {
+    await throwOnResponseError(saveResponse)
+  }
+
+  const pdfUrl = new URL(`${getReporterReportPath(fileName)}/pdf`, window.location.origin)
+  pdfUrl.searchParams.set('versionNumber', versionNumber.toFixed(1))
+  const pdfResponse = await fetch(pdfUrl, {
     method: 'GET',
     headers: { Accept: 'application/pdf' },
   })
 
-  if (!response.ok) {
-    const responseText = await response.text()
-    let message = responseText || `Request failed with status ${response.status}`
-
-    try {
-      const payload = JSON.parse(responseText) as unknown
-      if (typeof payload === 'object' && payload !== null && 'error' in payload) {
-        message = String(payload.error)
-      }
-    } catch {
-      // Keep the plain-text response as the error message.
-    }
-
-    throw new ApiRequestError(message, response.status, responseText)
+  if (!pdfResponse.ok) {
+    await throwOnResponseError(pdfResponse)
   }
 
-  return response.blob()
+  return pdfResponse.blob()
 }
