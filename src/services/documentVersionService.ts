@@ -36,13 +36,6 @@ export type SaveDocumentInput = {
 
 const REPORTER_API_PATH = '/api/reporter'
 
-// The version scale grows in 0.1 increments (0.1, 0.2, ...) with no upper cap.
-const VERSION_INCREMENT = 0.1
-
-function roundVersion(value: number): number {
-  return Math.round(value * 10) / 10
-}
-
 function normalizePeople(payload: unknown): Person[] {
   if (!Array.isArray(payload)) {
     return []
@@ -179,41 +172,6 @@ async function fetchDocumentCombos(baseName: string): Promise<DocumentRecord[]> 
     .filter((item) => parseComboDocumentName(item.documentName)?.baseName === baseName)
 }
 
-// Checks whether a version already exists for this document (across all its author x customer
-// combos) and, if so, returns the next version number (last saved version + 0.1). Otherwise 0.1.
-export async function computeNextVersionNumber(baseName: string): Promise<number> {
-  const versionsResponse = await executeRequest('GET', SETTINGS_VERSIONS_PATH)
-  if (!Array.isArray(versionsResponse.payload)) {
-    return VERSION_INCREMENT
-  }
-
-  const matchingVersionNumbers = versionsResponse.payload
-    .map((item): number | null => {
-      if (typeof item !== 'object' || item === null) {
-        return null
-      }
-
-      const record = item as Record<string, unknown>
-      const documentName = typeof record.documentName === 'string' ? record.documentName : ''
-      if (parseComboDocumentName(documentName)?.baseName !== baseName) {
-        return null
-      }
-
-      const versionNumber = typeof record.versionNumber === 'number'
-        ? record.versionNumber
-        : Number(record.versionNumber)
-
-      return Number.isFinite(versionNumber) ? versionNumber : null
-    })
-    .filter((value): value is number => value !== null)
-
-  if (matchingVersionNumbers.length === 0) {
-    return VERSION_INCREMENT
-  }
-
-  return roundVersion(Math.max(...matchingVersionNumbers) + VERSION_INCREMENT)
-}
-
 export type ExistingDocumentSummary = {
   title: string
   projectManager: string
@@ -298,8 +256,11 @@ export async function fetchExistingDocument(baseName: string): Promise<ExistingD
   }
 }
 
-// Creates or updates one document row per selected author x customer combination (all sharing
-// the base name + the same new version number), then appends a version snapshot for each combo.
+// Creates or updates one document row per selected author x customer combination, then appends
+// a version snapshot for each combo. The API now owns version numbering (see VersionsResource):
+// it auto-increments per documentName and reuses the latest version when nothing changed, so the
+// versionNumber sent here is ignored by the server — the persisted value from its response is
+// what must be trusted and surfaced to the caller.
 export async function saveDocument(input: SaveDocumentInput): Promise<number> {
   if (input.authorIds.length === 0) {
     throw new Error('Select at least one author.')
@@ -313,7 +274,7 @@ export async function saveDocument(input: SaveDocumentInput): Promise<number> {
     throw new Error('Description is required.')
   }
 
-  const nextVersion = await computeNextVersionNumber(input.documentName)
+  let savedVersionNumber: number | null = null
 
   for (const authorId of input.authorIds) {
     for (const costumersListId of input.costumersListIds) {
@@ -335,19 +296,28 @@ export async function saveDocument(input: SaveDocumentInput): Promise<number> {
         await executeRequest('POST', SETTINGS_DOCUMENTS_PATH, documentPayload)
       }
 
-      // VersionRequest.versionNumber is a string field in the API (see /q/openapi), so the
-      // numeric value is formatted with a fixed 1-decimal precision before sending it.
       // The backend rejects the request with 400 if `description` is missing/blank.
-      await executeRequest('POST', SETTINGS_VERSIONS_PATH, {
-        versionNumber: nextVersion.toFixed(1),
+      const versionResponse = await executeRequest('POST', SETTINGS_VERSIONS_PATH, {
         description: input.description.trim(),
         markdownContent: input.markdownContent,
         documentName: comboDocumentName,
       })
+
+      const payload = versionResponse.payload as Record<string, unknown> | null
+      const versionNumber = typeof payload?.versionNumber === 'string'
+        ? Number(payload.versionNumber)
+        : null
+      if (versionNumber !== null && Number.isFinite(versionNumber)) {
+        savedVersionNumber = versionNumber
+      }
     }
   }
 
-  return nextVersion
+  if (savedVersionNumber === null) {
+    throw new Error('The API did not return a version number for the saved document.')
+  }
+
+  return savedVersionNumber
 }
 
 // Removes every author x customer combo document row saved under this base name, if any.
