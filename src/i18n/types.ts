@@ -106,6 +106,11 @@ export type TranslationDictionary = {
   'settings.couldNotLoadDetail': string
   'settings.initialRequired': string
   'settings.initialRequiredBody': string
+  'settings.initialChecklistTitle': string
+  'settings.initialChecklistLanguage': string
+  'settings.initialChecklistIntegrations': string
+  'settings.initialChecklistWorkflow': string
+  'settings.initialChecklistBranding': string
   'settings.couldNotSave': string
   'settings.couldNotSaveDetail': string
   'settings.couldNotUpdate': string
@@ -156,6 +161,9 @@ export type TranslationDictionary = {
   'reports.couldNotRemoveAuthor': string
   'reports.couldNotRemoveCustomer': string
   'reports.completeFields': string
+  'reports.pendingChanges': string
+  'reports.pendingChangesBody': string
+  'reports.switchReportWarning': string
   'reports.versionSaved': string
   'reports.couldNotSaveVersion': string
   'reports.couldNotExportPdf': string

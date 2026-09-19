@@ -369,6 +369,20 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
     )
   }
 
+  function renderSetupChecklist() {
+    return (
+      <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+        <strong>{t('settings.initialChecklistTitle')}</strong>
+        <ul style={{ marginTop: '0.5rem', marginBottom: 0, paddingLeft: '1.25rem' }}>
+          <li>{t('settings.initialChecklistLanguage')}</li>
+          <li>{t('settings.initialChecklistIntegrations')}</li>
+          <li>{t('settings.initialChecklistWorkflow')}</li>
+          <li>{t('settings.initialChecklistBranding')}</li>
+        </ul>
+      </div>
+    )
+  }
+
   function renderFormFields() {
     return (
       <>
@@ -464,6 +478,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
             <Alert isInline variant="info" title={t('settings.initialRequired')}>
               {t('settings.initialRequiredBody')}
             </Alert>
+            {renderSetupChecklist()}
             {saveError ? (
               <Alert isInline variant="danger" title={t('settings.couldNotSave')}>
                 {saveError}

@@ -794,6 +794,26 @@ function App() {
     }
   }, [isAnalyzerStatusPolling])
 
+  const collectionStepHint = isCollectionInProgress
+    ? t('harvester.collecting')
+    : collectionCompleted
+      ? t('common.completed')
+      : t('workflow.collectHint')
+
+  const analyzerStepHint = isAnalyzerInProgress
+    ? t('analyzer.analyzing')
+    : analysisCompleted
+      ? t('common.completed')
+      : collectionCompleted
+        ? t('workflow.analyzeHint')
+        : t('harvester.collectionCompletedContinue')
+
+  const reportsStepHint = isAnalyzerInProgress
+    ? t('analyzer.analyzing')
+    : analysisCompleted
+      ? (analyzerReports.length > 0 ? t('workflow.reportsAvailable', { count: analyzerReports.length }) : t('workflow.viewGeneratedReports'))
+      : t('workflow.viewGeneratedReports')
+
   function toggleNamespace(namespace: string, checked: boolean) {
     setSelectedNamespaces((previousSelection) => {
       if (checked) {
@@ -1076,6 +1096,13 @@ function App() {
       sidebar={sidebar}
       isManagedSidebar
     >
+      {isSystemConfigured === false ? (
+        <PageSection>
+          <Alert isInline variant="info" title={t('settings.initialRequired')}>
+            {t('settings.initialRequiredBody')}
+          </Alert>
+        </PageSection>
+      ) : null}
       <PageSection className="workflow-section">
         <nav className="workflow-stepper" aria-label={t('workflow.progress')}>
           <button
@@ -1087,7 +1114,7 @@ function App() {
             <span className="workflow-step-number">1</span>
             <span>
               <strong>{t('workflow.collectData')}</strong>
-              <small>{collectionCompleted ? t('common.completed') : t('workflow.collectHint')}</small>
+              <small>{collectionStepHint}</small>
             </span>
           </button>
           <span className="workflow-connector" aria-hidden="true" />
@@ -1100,7 +1127,7 @@ function App() {
             <span className="workflow-step-number">2</span>
             <span>
               <strong>{t('workflow.analyze')}</strong>
-              <small>{analysisCompleted ? t('common.completed') : t('workflow.analyzeHint')}</small>
+              <small>{analyzerStepHint}</small>
             </span>
           </button>
           <span className="workflow-connector" aria-hidden="true" />
@@ -1113,7 +1140,7 @@ function App() {
             <span className="workflow-step-number">3</span>
             <span>
               <strong>{t('workflow.reviewReports')}</strong>
-              <small>{analyzerReports.length > 0 ? t('workflow.reportsAvailable', { count: analyzerReports.length }) : t('workflow.viewGeneratedReports')}</small>
+              <small>{reportsStepHint}</small>
             </span>
           </button>
         </nav>
@@ -1199,6 +1226,16 @@ function App() {
                       {selectedNamespaces.length > 0 ? ` (${selectedNamespacesText})` : ''}
                     </small>
                   </FormGroup>
+                  {!isCollectionInProgress && selectedNamespaces.length === 0 ? (
+                    <Alert isInline variant="info" title={t('harvester.noNamespaces')}>
+                      {t('workflow.collectHint')}
+                    </Alert>
+                  ) : null}
+                  {selectedNamespaces.length > 0 && !isCollectionInProgress ? (
+                    <Alert isInline variant="success" title={t('workflow.collectData')}>
+                      {t('common.selected')}: {selectedNamespaces.length} ({selectedNamespacesText})
+                    </Alert>
+                  ) : null}
                   <div className="collect-run-actions">
                     <Button
                       type="button"
@@ -1219,6 +1256,17 @@ function App() {
                   </div>
                   {hasCollectionStarted ? (
                     <div className="collection-progress" aria-live="polite">
+                      <Alert
+                        isInline
+                        variant={collectionStatusError ? 'warning' : isCollectionInProgress ? 'info' : 'success'}
+                        title={collectionStatusError
+                          ? t('harvester.statusRetry')
+                          : isCollectionInProgress
+                            ? t('harvester.collecting')
+                            : t('harvester.collectionCompleted')}
+                      >
+                        {collectionStatusError ? collectionStatusError : isCollectionInProgress ? t('harvester.collecting') : t('harvester.collectionCompleted')}
+                      </Alert>
                       <Progress
                         value={collectionProgress}
                         title={t('harvester.collectionProgress')}
@@ -1411,6 +1459,16 @@ function App() {
                       {selectedAnalyzerNamespaces.length > 0 ? ` (${selectedAnalyzerNamespacesText})` : ''}
                     </small>
                   </FormGroup>
+                  {!isAnalyzerInProgress && selectedAnalyzerNamespaces.length === 0 ? (
+                    <Alert isInline variant="info" title={t('analyzer.noNamespaces')}>
+                      {t('analyzer.runCollectionFirst')}
+                    </Alert>
+                  ) : null}
+                  {selectedAnalyzerNamespaces.length > 0 && !isAnalyzerInProgress ? (
+                    <Alert isInline variant="success" title={t('workflow.analyze')}>
+                      {t('common.selected')}: {selectedAnalyzerNamespaces.length} ({selectedAnalyzerNamespacesText})
+                    </Alert>
+                  ) : null}
                   <FormGroup label={t('analyzer.mode')} fieldId="run-mode">
                     <Flex direction={{ default: 'column' }}>
                       <FlexItem>
@@ -1444,6 +1502,25 @@ function App() {
                   </div>
                   {hasAnalyzerStarted ? (
                     <div className="collection-progress" aria-live="polite">
+                      <Alert
+                        isInline
+                        variant={predictiveStatusError || analyzerStatusError ? 'warning' : isAnalyzerInProgress ? 'info' : 'success'}
+                        title={predictiveStatusError
+                          ? t('analyzer.predictiveStatusRetry')
+                          : analyzerStatusError
+                            ? t('analyzer.statusRetry')
+                            : isAnalyzerInProgress
+                              ? t('analyzer.analyzing')
+                              : t('analyzer.analysisCompleted')}
+                      >
+                        {predictiveStatusError
+                          ? predictiveStatusError
+                          : analyzerStatusError
+                            ? analyzerStatusError
+                            : isAnalyzerInProgress
+                              ? t('analyzer.analyzing')
+                              : t('analyzer.analysisCompleted')}
+                      </Alert>
                       <Progress
                         value={analyzerProgress}
                         title={t('analyzer.progress')}

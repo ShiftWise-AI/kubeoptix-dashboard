@@ -1,46 +1,46 @@
 # KubeOptix Dashboard
 
-React + TypeScript web application for operating the ShiftWise AI / KubeOptix assessment workflow. The dashboard coordinates data collection, analysis, report editing, document versioning, and system configuration through a PatternFly interface.
+Dashboard web em React + TypeScript para operar o fluxo de avaliação do ShiftWise AI / KubeOptix. A interface coordena coleta de dados, análise, edição de relatórios, versionamento de documentos e configuração do sistema com PatternFly.
 
-## How the application works
+## Visão geral do fluxo
 
-The main workflow is intentionally sequential:
+O fluxo principal foi desenhado para ser sequencial:
 
-1. **Configurations**: create the single system-settings record, choose the language and default extraction method, configure model/API-key fields, and optionally upload a PNG, JPEG, WEBP, or SVG logo (maximum 2 MB). The operational workflow remains unavailable until this record exists.
-2. **Harvester**: select namespaces, start an assessment collection, monitor progress, inspect the collected assessment tree, and delete assessment data when required.
-3. **Analyzer**: select namespaces and run either generative analysis (LLM) or predictive analysis (machine learning). Long-running jobs are polled until completion.
-4. **Reports**: review generated Markdown reports, edit their content, preview or download Markdown, and save document versions with metadata.
+1. Configurações: cria o registro único de configurações do sistema, define idioma e método de extração padrão, configura campos de modelo e chave de API e, opcionalmente, faz upload de logotipo em PNG, JPEG, WEBP ou SVG (máximo 2 MB). O restante do fluxo operacional fica indisponível até que esse registro exista.
+2. Harvester: seleciona namespaces, inicia a coleta da avaliação, acompanha o progresso, inspeciona a árvore coletada e remove dados quando necessário.
+3. Analyzer: seleciona namespaces e executa análise generativa (LLM) ou preditiva (machine learning). Jobs longos são consultados até a conclusão.
+4. Reports: revisa relatórios em Markdown gerados, edita o conteúdo, visualiza ou baixa o Markdown e salva versões do documento com metadados.
 
-The Reports screen also manages authors and customer lists. A document can use multiple authors and customers; the client represents each author/customer combination as a document record while keeping one report visible in the list. Saved reports are marked with their version, while unsaved reports remain drafts.
+A tela de relatórios também gerencia listas de autores e clientes. Um documento pode ter vários autores e clientes; o cliente representa cada combinação autor/cliente como um registro de documento, mantendo um único relatório visível na lista. Relatórios salvos são marcados pela versão, enquanto rascunhos permanecem não salvos.
 
-Saving a document writes the edited Markdown to the reporter service, creates the document/version records in the configuration service, and then removes the raw report file from the core AI report store. The saved document remains visible from the configuration database. A saved document can be exported as PDF; the dashboard rehydrates the report file before requesting the reporter PDF endpoint when the source file is no longer on disk.
+Ao salvar um documento, o dashboard grava o Markdown editado no serviço de reporter, cria os registros de documento/versão no serviço de configuração e remove o arquivo bruto do repositório de relatórios da IA. O documento salvo continua visível no banco de configuração. Ele também pode ser exportado em PDF; o dashboard rehidrata o arquivo antes de solicitar o endpoint de PDF do reporter quando a origem não está mais disponível em disco.
 
-## Backend services and proxy paths
+## Serviços de backend e rotas do proxy
 
-The browser only calls the dashboard's local paths. In development, Vite proxies these requests. In production, `server.mjs` performs the same proxying at runtime:
+O navegador chama apenas as rotas locais do dashboard. Em desenvolvimento, o Vite faz o proxy dessas requisições. Em produção, `server.mjs` executa o mesmo proxy em tempo de execução:
 
-| Dashboard path | Upstream responsibility |
+| Rota do dashboard | Responsabilidade upstream |
 | --- | --- |
-| `/api/harvester/*` and collection paths | Namespace discovery, collection, status, and assessment data |
-| `/api/analyzer/*` | Generative analysis, status, namespaces, and analyzer report listing |
-| `/api/reporter/*` | Markdown read/write and PDF rendering |
-| `/api/core-ai/*` | Predictive analysis and core AI operations |
-| `/api/reports/*` | Core AI report status and report-file deletion |
-| `/api/settings/*` | System settings, logo, authors, customer lists, documents, and versions |
+| `/api/harvester/*` e caminhos de coleta | Descoberta de namespaces, coleta, status e dados da avaliação |
+| `/api/analyzer/*` | Análise generativa, status, namespaces e listagem de relatórios do analyzer |
+| `/api/reporter/*` | Leitura/escrita de Markdown e renderização em PDF |
+| `/api/core-ai/*` | Análise preditiva e operações da core AI |
+| `/api/reports/*` | Status de relatórios da core AI e exclusão de arquivos |
+| `/api/settings/*` | Configurações do sistema, logotipo, autores, clientes, documentos e versões |
 
-The proxy keeps upstream service URLs out of browser requests and provides one frontend entrypoint for the deployment.
+O proxy mantém as URLs dos serviços upstream fora do navegador e fornece um único ponto de entrada para o frontend.
 
-## Tech stack
+## Stack tecnológica
 
 - React 19
-- TypeScript in strict mode
+- TypeScript em modo estrito
 - Vite 8
 - PatternFly 6.6.1
-- Vitest for unit tests
-- Node.js production server and API proxy
-- Podman, Helm, and OpenShift deployment support
+- Vitest para testes unitários
+- Servidor Node.js para produção e proxy de APIs
+- Suporte a implantação com Podman, Helm e OpenShift
 
-## Project structure
+## Estrutura do projeto
 
 ```text
 .
@@ -64,40 +64,47 @@ The proxy keeps upstream service URLs out of browser requests and provides one f
 └── ...
 ```
 
-## Local development
+## Pré-requisitos
 
-Install dependencies:
+- Node.js 20+ (ou versão compatível com o projeto)
+- npm
+- Podman para builds de container
+- Helm e oc para implantação em OpenShift
+
+## Desenvolvimento local
+
+Instale as dependências:
 
 ```bash
 npm install
 ```
 
-Start the development server:
+Inicie o servidor de desenvolvimento:
 
 ```bash
 npm run dev
 ```
 
-The Vite app loads `.env.development` automatically. Open the URL printed by Vite, normally `http://localhost:5173`.
+O Vite carrega automaticamente `.env.development`. Abra a URL exibida pelo Vite, normalmente `http://localhost:5173`.
 
-Available commands:
+Comandos disponíveis:
 
 ```bash
-npm run dev       # Start Vite in development mode
-npm run build     # Type-check and create dist/
-npm run preview   # Preview the Vite production build
-npm run start     # Serve dist/ through server.mjs on port 8080
-npm run test      # Run the Vitest suite once
-npm run lint      # Run oxlint
+npm run dev       # Inicia o Vite em modo de desenvolvimento
+npm run build     # Realiza type-check e gera o dist/
+npm run preview   # Visualiza a build de produção
+npm run start     # Serve dist/ via server.mjs na porta 8080
+npm run test      # Executa a suíte do Vitest
+npm run lint      # Executa o oxlint
 ```
 
-In development, the browser uses local frontend paths and Vite proxies requests to the upstream services without exposing their URLs to the client.
+Em desenvolvimento, o navegador usa rotas locais do frontend e o Vite faz proxy para os serviços upstream sem expor suas URLs ao cliente.
 
-## Environment configuration
+## Configuração de ambiente
 
-### Development variables
+### Variáveis de desenvolvimento
 
-The expected values are defined in `.env.development`:
+Os valores esperados estão em `.env.development`:
 
 ```env
 ENV=development
@@ -109,11 +116,11 @@ SETTINGS_API_URL=http://localhost:8000
 TZ=UTC-3
 ```
 
-`SETTINGS_API_URL` is optional in the checked-in development file because Vite defaults it to `http://localhost:8000`, but it can be set explicitly when the configuration service is running elsewhere.
+`SETTINGS_API_URL` é opcional no arquivo de desenvolvimento porque o Vite usa `http://localhost:8000` por padrão, mas pode ser definido explicitamente quando o serviço de configuração estiver em outro host.
 
-### OpenShift variables
+### Variáveis do OpenShift
 
-The production image is configured via `.env.openshift`:
+A imagem de produção é configurada por meio de `.env.openshift`:
 
 ```env
 ENV=openshift
@@ -125,61 +132,61 @@ SETTINGS_API_URL=http://configurations-api:8000
 TZ=America/Sao_Paulo
 ```
 
-For the production server, `HARVESTER_API_URL` and `ANALYZER_API_URL` must be present because `server.mjs` constructs those URLs at startup. The other upstream URLs have container-friendly defaults, but setting all five explicitly is recommended.
+No servidor de produção, `HARVESTER_API_URL` e `ANALYZER_API_URL` devem estar presentes porque `server.mjs` monta essas URLs na inicialização. As demais URLs upstream têm defaults amigáveis a contêineres, mas é recomendado definir as cinco explicitamente.
 
-## Production runtime
+## Execução em produção
 
-The production server is implemented in `server.mjs`, serves the `dist/` frontend, proxies backend APIs at runtime, and listens on `0.0.0.0:8080`. It exposes `/healthz`, returning `{ "status": "ok" }`, for readiness and liveness probes.
+O servidor de produção está em `server.mjs`, serve o frontend em `dist/`, faz proxy das APIs em tempo de execução e escuta em `0.0.0.0:8080`. Ele expõe `/healthz`, retornando `{ "status": "ok" }`, para readiness e liveness probes.
 
-Build the app:
+Faça a build:
 
 ```bash
 npm run build
 ```
 
-Run the compiled app locally with the production server:
+Execute a aplicação compilada com o servidor de produção:
 
 ```bash
 npm run start
 ```
 
-The server does not load `.env` files by itself. Provide runtime values through the shell, an environment manager, or a container/OpenShift `ConfigMap`.
+O servidor não carrega arquivos `.env` por si só. Informe os valores em runtime via shell, gerenciador de ambiente ou `ConfigMap` do container/OpenShift.
 
-## Container image
+## Imagem de container
 
-Build the container image:
+Construa a imagem do container:
 
 ```bash
 podman build -t kubeoptix-dashboard -f Containerfile .
 ```
 
-Run it locally with an environment file:
+Execute localmente com um arquivo de ambiente:
 
 ```bash
 podman run --env-file .env -p 8080:8080 kubeoptix-dashboard
 ```
 
-The image is built in two stages from UBI 10, serves the compiled app as the non-root `kubeoptix` user, exposes port `8080`, and uses a read-only root filesystem in the OpenShift workload.
+A imagem é construída em duas etapas a partir do UBI 10, serve a aplicação como usuário não-root `kubeoptix`, expõe a porta `8080` e usa filesystem somente leitura na carga de trabalho do OpenShift.
 
-## OpenShift deployment
+## Implantação no OpenShift
 
-The project includes a Helm chart under `helm/kubeoptix-dashboard` that creates:
+O projeto inclui um Helm chart em `helm/kubeoptix-dashboard` que cria:
 
-- an `ImageStream` and binary `BuildConfig` for the `Containerfile`;
-- a `ConfigMap` generated from the supplied OpenShift environment file;
-- a single-replica `StatefulSet` with `/healthz` probes;
-- a `Service` and HTTPS `Route` with HTTP-to-HTTPS redirect;
-- a `ValidatingAdmissionPolicy` and binding that prevent scaling away from one replica.
+- um `ImageStream` e um `BuildConfig` binário para o `Containerfile`;
+- um `ConfigMap` gerado a partir do arquivo de ambiente do OpenShift;
+- um `StatefulSet` de réplica única com probes em `/healthz`;
+- um `Service` e uma `Route` HTTPS com redirecionamento HTTP-to-HTTPS;
+- uma `ValidatingAdmissionPolicy` e binding que impedem redução para menos de uma réplica.
 
-The chart requires `.Values.environmentFile`. The included `install.sh` supplies `.env.openshift` with `--set-file`, first installs the build-only resources, starts a binary build with `oc start-build`, and then installs the workload resources. The cluster must allow `BuildConfig`, `ImageStream`, `Route`, and admission-policy resources in the `shiftwise-ai` namespace.
+O chart exige `.Values.environmentFile`. O script `install.sh` fornece `.env.openshift` com `--set-file`, instala primeiro os recursos de build, inicia um build binário com `oc start-build` e depois instala os recursos da carga de trabalho. O cluster precisa permitir recursos de `BuildConfig`, `ImageStream`, `Route` e admission policy no namespace `shiftwise-ai`.
 
-Install the chart:
+Instale o chart:
 
 ```bash
 ./install.sh
 ```
 
-The script requires `helm` and `oc`, access to the target OpenShift cluster, permission to create resources in `shiftwise-ai`, and a working internal registry/build configuration. To render or install the chart manually, pass the environment file explicitly:
+O script exige `helm` e `oc`, acesso ao cluster OpenShift alvo, permissão para criar recursos em `shiftwise-ai` e uma configuração funcional de registro interno/build. Para renderizar ou instalar manualmente, passe o arquivo de ambiente explicitamente:
 
 ```bash
 helm upgrade --install kubeoptix-dashboard helm/kubeoptix-dashboard \
@@ -189,23 +196,23 @@ helm upgrade --install kubeoptix-dashboard helm/kubeoptix-dashboard \
   --set buildOnly=false
 ```
 
-Watch the build and rollout:
+Acompanhe o build e o rollout:
 
 ```bash
 oc logs -f bc/kubeoptix-dashboard -n shiftwise-ai
 oc rollout status statefulset/kubeoptix-dashboard -n shiftwise-ai
 ```
 
-Get the generated Route URL:
+Obtenha a URL da Route gerada:
 
 ```bash
 oc get route kubeoptix-dashboard -n shiftwise-ai \
   -o jsonpath='https://{.spec.host}{"\n"}'
 ```
 
-## Validation
+## Validação
 
-Run the automated checks:
+Execute os checks automatizados:
 
 ```bash
 npm run test
@@ -213,7 +220,7 @@ npm run build
 npm run lint
 ```
 
-These commands verify the frontend, service integration tests, type-check/build output, and lint rules before deployment. For an OpenShift rollout, also verify readiness and the generated route:
+Esses comandos validam o frontend, testes de integração de serviços, build e regras de lint antes do deploy. Para um rollout no OpenShift, também verifique readiness e a route gerada:
 
 ```bash
 oc rollout status statefulset/kubeoptix-dashboard -n shiftwise-ai
