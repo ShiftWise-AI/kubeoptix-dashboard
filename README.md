@@ -127,10 +127,14 @@ ENV=openshift
 HARVESTER_API_URL=http://harvester-api:8000
 ANALYZER_API_URL=http://analyzer-api:8000
 REPORTER_API_URL=http://reporter-api:8000
-CORE_AI_API_URL=http://core-ai-api.shiftwise-ai.svc.cluster.local:8000
+CORE_AI_API_URL=http://core-ai-api:8000
 SETTINGS_API_URL=http://configurations-api:8000
 TZ=America/Sao_Paulo
 ```
+
+Os serviços internos usam os nomes DNS curtos porque o dashboard e as APIs são
+implantados no mesmo namespace (`shiftwise-ai`). Antes de disponibilizar o
+dashboard, confirme que todos esses Services já existem no namespace.
 
 No servidor de produção, `HARVESTER_API_URL` e `ANALYZER_API_URL` devem estar presentes porque `server.mjs` monta essas URLs na inicialização. As demais URLs upstream têm defaults amigáveis a contêineres, mas é recomendado definir as cinco explicitamente.
 
@@ -228,4 +232,3 @@ oc get pods -n shiftwise-ai -l app.kubernetes.io/name=kubeoptix-dashboard
 oc get route kubeoptix-dashboard -n shiftwise-ai \
   -o jsonpath='https://{.spec.host}{"\n"}'
 ```
-
