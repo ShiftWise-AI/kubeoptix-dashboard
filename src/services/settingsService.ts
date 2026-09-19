@@ -69,13 +69,15 @@ export async function updateSystemSettings(input: Partial<SystemSettingsInput>):
 export const LOGO_MAX_SIZE_BYTES = 2 * 1024 * 1024
 export const LOGO_ACCEPTED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
 
-export function validateLogoFile(file: File): string | null {
+export type LogoValidationError = 'unsupportedType' | 'tooLarge'
+
+export function validateLogoFile(file: File): LogoValidationError | null {
   if (!LOGO_ACCEPTED_MIME_TYPES.includes(file.type)) {
-    return 'Unsupported image type. Use PNG, JPEG, WEBP or SVG.'
+    return 'unsupportedType'
   }
 
   if (file.size > LOGO_MAX_SIZE_BYTES) {
-    return 'The image is too large. Maximum allowed size is 2 MB.'
+    return 'tooLarge'
   }
 
   return null

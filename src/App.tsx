@@ -41,6 +41,7 @@ import type { DocumentReport } from './DocumentDependenciesPage'
 import dashboardLogo from '../image/logo.png'
 import { fetchSystemSettings } from './services/settingsService'
 import type { SystemSettings } from './services/settingsService'
+import { useI18n, type TranslationKey } from './i18n'
 import {
   ANALYZER_ASSESSMENT_NAMESPACES_PATH,
   ANALYZER_REPORT_FILES_PATH,
@@ -156,38 +157,45 @@ function normalizeNamespacesResponse(payload: unknown): string[] {
   return []
 }
 
-function normalizeCollectionProgress(payload: unknown): number {
+function normalizeCollectionProgress(payload: unknown, invalidMessage: string): number {
   const rawProgress = typeof payload === 'number' ? payload : Number(payload)
 
   if (!Number.isFinite(rawProgress)) {
-    throw new Error('The collection status API returned an invalid percentage.')
+    throw new Error(invalidMessage)
   }
 
   return Math.min(100, Math.max(0, rawProgress))
 }
 
-function normalizeProgressResponse(payload: unknown): number {
+function normalizeProgressResponse(payload: unknown, invalidMessage: string): number {
   if (typeof payload === 'object' && payload !== null && 'progress' in payload) {
-    return normalizeCollectionProgress((payload as Record<string, unknown>).progress)
+    return normalizeCollectionProgress((payload as Record<string, unknown>).progress, invalidMessage)
   }
 
-  return normalizeCollectionProgress(payload)
+  return normalizeCollectionProgress(payload, invalidMessage)
 }
 
-function normalizeAssessmentTree(payload: unknown, parentPath = ''): TreeViewDataItem {
+function normalizeAssessmentTree(
+  payload: unknown,
+  parentPath = '',
+  messages: { invalidTree: string; invalidNode: string } = {
+    invalidTree: 'Invalid assessment file tree.',
+    invalidNode: 'Invalid assessment file tree node.',
+  },
+): TreeViewDataItem {
   if (typeof payload !== 'object' || payload === null) {
-    throw new Error('The assessment API returned an invalid file tree.')
+    throw new Error(messages.invalidTree)
   }
 
   const node = payload as Record<string, unknown>
   if (typeof node.name !== 'string' || (node.type !== 'directory' && node.type !== 'file')) {
-    throw new Error('The assessment API returned an invalid file tree node.')
+    throw new Error(messages.invalidNode)
   }
 
   const path = `${parentPath}/${node.name}`
   const isDirectory = node.type === 'directory'
   const children = Array.isArray(node.children)
-    ? node.children.map((child) => normalizeAssessmentTree(child, path))
+    ? node.children.map((child) => normalizeAssessmentTree(child, path, messages))
     : []
 
   return {
@@ -337,6 +345,7 @@ async function deleteReportContent(fileName: string): Promise<void> {
 }
 
 function App() {
+  const { t, setLanguage, locale } = useI18n()
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
     return savedValue === 'dark' ? 'dark' : 'system'
@@ -370,7 +379,7 @@ function App() {
   const [isCollectionStatusPolling, setIsCollectionStatusPolling] = useState(false)
   const [hasCollectionStarted, setHasCollectionStarted] = useState(false)
   const [collectionProgress, setCollectionProgress] = useState(0)
-  const [collectionCompletionMessage, setCollectionCompletionMessage] = useState<string | null>(null)
+  const [collectionCompletionMessage, setCollectionCompletionMessage] = useState<TranslationKey | null>(null)
   const [collectionStatusError, setCollectionStatusError] = useState<string | null>(null)
   const [isAnalyzerStatusPolling, setIsAnalyzerStatusPolling] = useState(false)
   const [isPredictiveStatusPolling, setIsPredictiveStatusPolling] = useState(false)
@@ -378,7 +387,7 @@ function App() {
   const [isAnalyzerInProgress, setIsAnalyzerInProgress] = useState(false)
   const [hasAnalyzerStarted, setHasAnalyzerStarted] = useState(false)
   const [analyzerProgress, setAnalyzerProgress] = useState(0)
-  const [analyzerCompletionMessage, setAnalyzerCompletionMessage] = useState<string | null>(null)
+  const [analyzerCompletionMessage, setAnalyzerCompletionMessage] = useState<TranslationKey | null>(null)
   const [analyzerStatusError, setAnalyzerStatusError] = useState<string | null>(null)
   const [predictiveStatusError, setPredictiveStatusError] = useState<string | null>(null)
 
@@ -422,6 +431,10 @@ function App() {
     window.localStorage.setItem('kubeoptix-color-scheme', colorScheme)
   }, [colorScheme, systemPrefersDark])
 
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+
   const filteredNamespaces = useMemo(() => {
     const filterText = namespaceFilter.trim().toLowerCase()
     if (!filterText) {
@@ -453,7 +466,7 @@ function App() {
       const parsedNamespaces = normalizeNamespacesResponse(result.payload)
 
       if (parsedNamespaces.length === 0) {
-        throw new Error('No namespaces were returned by the API.')
+        throw new Error(t('harvester.noNamespacesReturned'))
       }
 
       setAvailableNamespaces(parsedNamespaces)
@@ -461,7 +474,7 @@ function App() {
         return previousSelection.filter((item) => parsedNamespaces.includes(item))
       })
     } catch (error) {
-      setLoadNamespacesError(error instanceof Error ? error.message : 'Could not load namespaces.')
+      setLoadNamespacesError(error instanceof Error ? error.message : t('harvester.couldNotLoadNamespaces'))
       setAvailableNamespaces([])
       setSelectedNamespaces([])
     } finally {
@@ -484,16 +497,18 @@ function App() {
           return
         }
 
+        setLanguage(settings.language)
         setMode(settings.defaultExtractionMethod === 'ml' ? 'predictive' : 'generative')
       } catch {
         setIsSystemConfigured(null)
       }
     })()
-  }, [])
+  }, [setLanguage])
 
   function handleSettingsChange(settings: SystemSettings | null) {
     setIsSystemConfigured(settings !== null)
     if (settings) {
+      setLanguage(settings.language)
       setMode(settings.defaultExtractionMethod === 'ml' ? 'predictive' : 'generative')
     }
   }
@@ -511,7 +526,7 @@ function App() {
         return previousSelection.filter((item) => parsedNamespaces.includes(item))
       })
     } catch (error) {
-      setLoadAnalyzerNamespacesError(error instanceof Error ? error.message : 'Could not load namespaces.')
+      setLoadAnalyzerNamespacesError(error instanceof Error ? error.message : t('analyzer.couldNotLoadNamespaces'))
       setAvailableAnalyzerNamespaces([])
       setSelectedAnalyzerNamespaces([])
     } finally {
@@ -528,7 +543,7 @@ function App() {
       const parsedReports = normalizeAnalyzerReports(result.payload)
       setAnalyzerReports(parsedReports)
     } catch (error) {
-      setAnalyzerReportsError(error instanceof Error ? error.message : 'Could not load report files.')
+      setAnalyzerReportsError(error instanceof Error ? error.message : t('analyzer.couldNotLoadReports'))
       setAnalyzerReports([])
     } finally {
       setIsLoadingAnalyzerReports(false)
@@ -582,7 +597,7 @@ function App() {
     async function pollCollectionStatus() {
       try {
         const result = await executeRequest('GET', HARVESTER_COLLECT_STATUS_PATH)
-        const progress = normalizeCollectionProgress(result.payload)
+        const progress = normalizeCollectionProgress(result.payload, t('harvester.invalidProgress'))
 
         if (!isActive) {
           return
@@ -595,7 +610,7 @@ function App() {
           setIsCollectionStatusPolling(false)
           setIsCollectionInProgress(false)
           setCollectResponse((previousState) => ({ ...previousState, pending: false }))
-          setCollectionCompletionMessage('Collection completed. You can continue to Analyzer.')
+          setCollectionCompletionMessage('harvester.collectionCompletedContinue')
           void loadNamespaces()
           void loadAnalyzerNamespaces()
           return
@@ -606,7 +621,7 @@ function App() {
         }
 
         setCollectionStatusError(
-          error instanceof Error ? error.message : 'Could not retrieve collection status.',
+          error instanceof Error ? error.message : t('harvester.couldNotRetrieveStatus'),
         )
       }
 
@@ -638,7 +653,10 @@ function App() {
 
       try {
         const result = await executeRequest('GET', HARVESTER_ASSESSMENT_PATH)
-        const tree = [normalizeAssessmentTree(result.payload)]
+        const tree = [normalizeAssessmentTree(result.payload, '', {
+          invalidTree: t('harvester.invalidFileTree'),
+          invalidNode: t('harvester.invalidFileTreeNode'),
+        })]
 
         if (isActive) {
           setAssessmentTree(tree)
@@ -649,7 +667,7 @@ function App() {
 
         if (isActive) {
           setAssessmentTreeError(
-            error instanceof Error ? error.message : 'Could not load assessment files.',
+            error instanceof Error ? error.message : t('harvester.couldNotLoadAssessmentFiles'),
           )
         }
       } finally {
@@ -685,7 +703,7 @@ function App() {
           'GET',
           `${CORE_AI_REPORT_STATUS_PATH}/${encodeURIComponent(executionId)}/status`,
         )
-        const progress = normalizeProgressResponse(result.payload)
+        const progress = normalizeProgressResponse(result.payload, t('harvester.invalidProgress'))
 
         if (!isActive) {
           return
@@ -698,7 +716,7 @@ function App() {
           setIsPredictiveStatusPolling(false)
           setIsAnalyzerInProgress(false)
           setRunResponse((previousState) => ({ ...previousState, pending: false }))
-          setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
+          setAnalyzerCompletionMessage('analyzer.analysisCompletedOpenReports')
           void loadAnalyzerReports()
           return
         }
@@ -708,7 +726,7 @@ function App() {
         }
 
         setPredictiveStatusError(
-          error instanceof Error ? error.message : 'Could not retrieve predictive analysis status.',
+          error instanceof Error ? error.message : t('analyzer.couldNotRetrievePredictiveStatus'),
         )
       }
 
@@ -736,7 +754,7 @@ function App() {
     async function pollAnalyzerStatus() {
       try {
         const result = await executeRequest('GET', ANALYZER_STATUS_PATH)
-        const progress = normalizeProgressResponse(result.payload)
+        const progress = normalizeProgressResponse(result.payload, t('harvester.invalidProgress'))
 
         if (!isActive) {
           return
@@ -749,7 +767,7 @@ function App() {
           setIsAnalyzerStatusPolling(false)
           setIsAnalyzerInProgress(false)
           setRunResponse((previousState) => ({ ...previousState, pending: false }))
-          setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
+          setAnalyzerCompletionMessage('analyzer.analysisCompletedOpenReports')
           void loadAnalyzerReports()
           return
         }
@@ -759,7 +777,7 @@ function App() {
         }
 
         setAnalyzerStatusError(
-          error instanceof Error ? error.message : 'Could not retrieve analyzer status.',
+          error instanceof Error ? error.message : t('analyzer.couldNotRetrieveStatus'),
         )
       }
 
@@ -855,7 +873,7 @@ function App() {
           pending: true,
           statusCode: error.statusCode,
           payload: error.payload,
-          error: 'A collection is already running. Tracking its current progress.',
+          error: t('harvester.collectionAlreadyRunning'),
         })
         setIsCollectionStatusPolling(true)
         return
@@ -868,7 +886,7 @@ function App() {
         pending: false,
         statusCode: null,
         payload: null,
-        error: error instanceof Error ? error.message : 'Unknown request error',
+        error: error instanceof Error ? error.message : t('common.unknownRequestError'),
       })
     }
   }
@@ -894,7 +912,7 @@ function App() {
         pending: false,
         statusCode: null,
         payload: null,
-        error: error instanceof Error ? error.message : 'Unknown request error',
+        error: error instanceof Error ? error.message : t('common.unknownRequestError'),
       })
     }
   }
@@ -922,7 +940,7 @@ function App() {
 
       if (mode === 'predictive') {
         if (!result.executionId) {
-          throw new Error('The predictive analysis did not return an execution ID.')
+          throw new Error(t('analyzer.missingExecutionId'))
         }
 
         setPredictiveExecutionId(result.executionId)
@@ -939,7 +957,7 @@ function App() {
       if (!result.requiresStatusPolling) {
         setAnalyzerProgress(100)
         setIsAnalyzerInProgress(false)
-        setAnalyzerCompletionMessage('Analysis completed. Open Reports to review the results.')
+        setAnalyzerCompletionMessage('analyzer.analysisCompletedOpenReports')
         setRunResponse({
           pending: false,
           statusCode: result.statusCode,
@@ -975,14 +993,14 @@ function App() {
         pending: false,
         statusCode: null,
         payload: null,
-        error: error instanceof Error ? error.message : 'Unknown request error',
+        error: error instanceof Error ? error.message : t('common.unknownRequestError'),
       })
     }
   }
 
   const sidebar = (
     <PageSidebar className="pf-v5-c-page__sidebar">
-      <Nav aria-label="Service sections">
+      <Nav aria-label={t('nav.serviceSections')}>
         <NavList>
           <NavItem
             itemId="harvester"
@@ -990,7 +1008,7 @@ function App() {
             disabled={isCollectionInProgress || isSystemConfigured === false}
             onClick={() => setActiveMenu('harvester')}
           >
-            Harvester
+            {t('nav.harvester')}
           </NavItem>
           <NavItem
             itemId="analyzer"
@@ -998,7 +1016,7 @@ function App() {
             disabled={isCollectionInProgress || isSystemConfigured === false}
             onClick={() => setActiveMenu('analyzer')}
           >
-            Analyzer
+            {t('nav.analyzer')}
           </NavItem>
           <NavItem
             itemId="reports"
@@ -1006,14 +1024,14 @@ function App() {
             disabled={isCollectionInProgress || isAnalyzerInProgress || isSystemConfigured === false}
             onClick={openAnalyzerReports}
           >
-            Reports
+            {t('nav.reports')}
           </NavItem>
           <NavItem
             itemId="configurations"
             isActive={activeMenu === 'configurations'}
             onClick={() => setActiveMenu('configurations')}
           >
-            Configurations
+            {t('nav.configurations')}
           </NavItem>
         </NavList>
       </Nav>
@@ -1029,7 +1047,7 @@ function App() {
             <Flex alignItems={{ default: 'alignItemsCenter' }}>
               <FlexItem>
                 <div className="app-logo-shell">
-                  <img className="app-logo" src={mastheadLogo} alt="ShiftWise AI logo" />
+                  <img className="app-logo" src={mastheadLogo} alt={t('app.logoAlt')} />
                 </div>
               </FlexItem>
               <FlexItem>
@@ -1041,12 +1059,12 @@ function App() {
           </MastheadBrand>
           <MastheadContent className="masthead-content">
             <span className="app-description">
-              Intelligence to Optimize OpenShift and Kubernetes Environments.
+              {t('app.description')}
             </span>
             <div className="masthead-tools">
               <Switch
                 id="color-scheme-switch"
-                label={colorScheme === 'dark' ? 'Dark' : 'System'}
+                label={colorScheme === 'dark' ? t('theme.dark') : t('theme.system')}
                 isChecked={colorScheme === 'dark'}
                 isDisabled={isCollectionInProgress}
                 onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'system')}
@@ -1059,7 +1077,7 @@ function App() {
       isManagedSidebar
     >
       <PageSection className="workflow-section">
-        <nav className="workflow-stepper" aria-label="Workflow progress">
+        <nav className="workflow-stepper" aria-label={t('workflow.progress')}>
           <button
             type="button"
             className={`workflow-step${activeMenu === 'harvester' ? ' is-active' : ''}${collectionCompleted ? ' is-complete' : ''}`}
@@ -1068,8 +1086,8 @@ function App() {
           >
             <span className="workflow-step-number">1</span>
             <span>
-              <strong>Collect data</strong>
-              <small>{collectionCompleted ? 'Completed' : 'Select namespaces and collect'}</small>
+              <strong>{t('workflow.collectData')}</strong>
+              <small>{collectionCompleted ? t('common.completed') : t('workflow.collectHint')}</small>
             </span>
           </button>
           <span className="workflow-connector" aria-hidden="true" />
@@ -1081,8 +1099,8 @@ function App() {
           >
             <span className="workflow-step-number">2</span>
             <span>
-              <strong>Analyze</strong>
-              <small>{analysisCompleted ? 'Completed' : 'Run an analysis'}</small>
+              <strong>{t('workflow.analyze')}</strong>
+              <small>{analysisCompleted ? t('common.completed') : t('workflow.analyzeHint')}</small>
             </span>
           </button>
           <span className="workflow-connector" aria-hidden="true" />
@@ -1094,8 +1112,8 @@ function App() {
           >
             <span className="workflow-step-number">3</span>
             <span>
-              <strong>Review reports</strong>
-              <small>{analyzerReports.length > 0 ? `${analyzerReports.length} available` : 'View generated reports'}</small>
+              <strong>{t('workflow.reviewReports')}</strong>
+              <small>{analyzerReports.length > 0 ? t('workflow.reportsAvailable', { count: analyzerReports.length }) : t('workflow.viewGeneratedReports')}</small>
             </span>
           </button>
         </nav>
@@ -1106,11 +1124,11 @@ function App() {
             <Card className="pf-v5-c-card">
               <CardHeader>
                 <div className="collection-card-heading">
-                  <Title headingLevel="h2" size="xl">KubeOptix Harvester</Title>
+                  <Title headingLevel="h2" size="xl">{t('harvester.title')}</Title>
                   <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} className="collection-card-header">
                     <FlexItem>
                       <Title headingLevel="h3">
-                        <PlayIcon /> Start collection
+                        <PlayIcon /> {t('harvester.startCollection')}
                       </Title>
                     </FlexItem>
                     <FlexItem>
@@ -1119,7 +1137,7 @@ function App() {
                         icon={<FolderOpenIcon />}
                         onClick={() => setIsAssessmentFilesModalOpen(true)}
                       >
-                        View files
+                        {t('harvester.viewFiles')}
                       </Button>
                     </FlexItem>
                   </Flex>
@@ -1127,31 +1145,31 @@ function App() {
               </CardHeader>
               <CardBody>
                 <Form onSubmit={handleCollect}>
-                  <FormGroup label="Namespaces" fieldId="namespaces-selector">
+                  <FormGroup label={t('harvester.namespaces')} fieldId="namespaces-selector">
                     <Flex gap={{ default: 'gapSm' }}>
                       <FlexItem>
                         <TextInput
                           value={namespaceFilter}
                           id="namespace-filter"
                           onChange={(_event, value) => setNamespaceFilter(value)}
-                          aria-label="Filter namespaces"
-                          placeholder="Filter namespaces"
+                          aria-label={t('harvester.filterNamespaces')}
+                          placeholder={t('harvester.filterNamespaces')}
                           isDisabled={isCollectionInProgress}
                         />
                       </FlexItem>
                       <FlexItem>
                         <Button type="button" variant="secondary" onClick={selectFilteredNamespaces} isDisabled={isCollectionInProgress || filteredNamespaces.length === 0}>
-                          Select filtered
+                          {t('harvester.selectFiltered')}
                         </Button>
                       </FlexItem>
                       <FlexItem>
                         <Button type="button" variant="secondary" onClick={clearAllNamespaces} isDisabled={isCollectionInProgress || selectedNamespaces.length === 0}>
-                          Clear all
+                          {t('harvester.clearAll')}
                         </Button>
                       </FlexItem>
                       <FlexItem>
                         <Button type="button" variant="link" onClick={loadNamespaces} isDisabled={isCollectionInProgress || isLoadingNamespaces}>
-                          {isLoadingNamespaces ? 'Refreshing...' : 'Refresh'}
+                          {isLoadingNamespaces ? t('common.refreshing') : t('common.refresh')}
                         </Button>
                       </FlexItem>
                     </Flex>
@@ -1161,7 +1179,7 @@ function App() {
                     <div className="namespace-selector-list" id="namespaces-selector">
                       {isLoadingNamespaces ? <Spinner size="md" /> : null}
                       {!isLoadingNamespaces && filteredNamespaces.length === 0 ? (
-                        <small>No namespaces found.</small>
+                        <small>{t('harvester.noNamespaces')}</small>
                       ) : null}
                       {!isLoadingNamespaces
                         ? filteredNamespaces.map((namespace) => (
@@ -1177,7 +1195,7 @@ function App() {
                         : null}
                     </div>
                     <small>
-                      Selected: {selectedNamespaces.length}
+                      {t('common.selected')}: {selectedNamespaces.length}
                       {selectedNamespaces.length > 0 ? ` (${selectedNamespacesText})` : ''}
                     </small>
                   </FormGroup>
@@ -1189,36 +1207,36 @@ function App() {
                       onClick={() => setIsDeleteAssessmentModalOpen(true)}
                       isDisabled={isCollectionInProgress || cleanupAssessmentResponse.pending}
                     >
-                      {cleanupAssessmentResponse.pending ? <Spinner size="md" /> : 'DELETE ALL'}
+                      {cleanupAssessmentResponse.pending ? <Spinner size="md" /> : t('harvester.deleteAll')}
                     </Button>
                     <Button
                       type="submit"
                       className="collect-run-button"
                       isDisabled={isCollectionInProgress || collectResponse.pending || selectedNamespaces.length === 0}
                     >
-                      {collectResponse.pending ? <Spinner size="md" /> : 'Run'}
+                      {collectResponse.pending ? <Spinner size="md" /> : t('common.run')}
                     </Button>
                   </div>
                   {hasCollectionStarted ? (
                     <div className="collection-progress" aria-live="polite">
                       <Progress
                         value={collectionProgress}
-                        title="Collection progress"
+                        title={t('harvester.collectionProgress')}
                         measureLocation="inside"
                       />
                       <p className="collection-progress-message">
                         {isCollectionInProgress
-                          ? 'Collecting data. Status updates every 2 seconds.'
-                          : 'Collection completed.'}
+                          ? t('harvester.collecting')
+                          : t('harvester.collectionCompleted')}
                       </p>
                       {collectionCompletionMessage ? (
-                        <Alert isInline variant="success" title={collectionCompletionMessage} />
+                        <Alert isInline variant="success" title={t(collectionCompletionMessage)} />
                       ) : null}
                       {collectionStatusError ? (
                         <Alert
                           isInline
                           variant="warning"
-                          title="Could not update collection status. Retrying in 2 seconds."
+                          title={t('harvester.statusRetry')}
                         >
                           {collectionStatusError}
                         </Alert>
@@ -1235,16 +1253,16 @@ function App() {
             isOpen={isDeleteAssessmentModalOpen}
             onClose={() => setIsDeleteAssessmentModalOpen(false)}
           >
-            <ModalHeader title="Do you want to perform this action?" labelId="delete-assessments-modal-title" />
+            <ModalHeader title={t('common.confirmActionTitle')} labelId="delete-assessments-modal-title" />
             <ModalBody id="delete-assessments-modal-description">
-              This action will remove all assessment data.
+              {t('harvester.deleteModalBody')}
             </ModalBody>
             <ModalFooter>
               <Button variant="danger" onClick={handleCleanupAssessment} isLoading={cleanupAssessmentResponse.pending}>
-                Yes, run
+                {t('common.yesRun')}
               </Button>
               <Button variant="link" onClick={() => setIsDeleteAssessmentModalOpen(false)}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             </ModalFooter>
           </Modal>
@@ -1256,20 +1274,20 @@ function App() {
             isOpen={isAssessmentFilesModalOpen}
             onClose={() => setIsAssessmentFilesModalOpen(false)}
           >
-            <ModalHeader title="Assessment files" labelId="assessment-files-modal-title" />
+            <ModalHeader title={t('harvester.assessmentFiles')} labelId="assessment-files-modal-title" />
             <ModalBody id="assessment-files-modal-description">
               {isLoadingAssessmentTree && assessmentTree.length === 0 ? (
                 <div className="assessment-tree-loading">
-                  <Spinner size="lg" aria-label="Loading assessment files" />
+                  <Spinner size="lg" aria-label={t('harvester.loadingAssessmentFiles')} />
                 </div>
               ) : null}
               {assessmentTreeError ? (
-                <p className="modal-feedback-message is-warning">Could not update the file list: {assessmentTreeError}</p>
+                <p className="modal-feedback-message is-warning">{t('harvester.couldNotUpdateFileList', { error: assessmentTreeError })}</p>
               ) : null}
               {assessmentTree.length > 0 ? (
                 <div className="assessment-tree-container">
                   <TreeView
-                    aria-label="Assessment file hierarchy"
+                    aria-label={t('harvester.assessmentTree')}
                     data={assessmentTree}
                     hasGuides
                     hasAnimations
@@ -1288,11 +1306,11 @@ function App() {
             <Card className="pf-v5-c-card">
               <CardHeader>
                 <div className="collection-card-heading">
-                  <Title headingLevel="h2" size="xl">KubeOptix Analyzer</Title>
+                  <Title headingLevel="h2" size="xl">{t('analyzer.title')}</Title>
                   <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} className="collection-card-header">
                     <FlexItem>
                       <Title headingLevel="h3">
-                        <ChartLineIcon /> Run analyzer
+                        <ChartLineIcon /> {t('analyzer.runAnalyzer')}
                       </Title>
                     </FlexItem>
                     <FlexItem>
@@ -1302,7 +1320,7 @@ function App() {
                         onClick={openAnalyzerReports}
                         isDisabled={isAnalyzerInProgress}
                       >
-                        View reports
+                        {t('analyzer.viewReports')}
                       </Button>
                     </FlexItem>
                   </Flex>
@@ -1313,26 +1331,26 @@ function App() {
                   <Alert
                     isInline
                     variant="info"
-                    title="No assessment data available"
+                    title={t('analyzer.noAssessmentData')}
                     actionLinks={[
                       <Button key="go-to-harvester" variant="link" onClick={() => setActiveMenu('harvester')}>
-                        Go to Harvester
+                        {t('analyzer.goToHarvester')}
                       </Button>,
                     ]}
                   >
-                    Run a collection in Harvester before starting an analysis.
+                    {t('analyzer.runCollectionFirst')}
                   </Alert>
                 ) : null}
                 <Form onSubmit={handleRunAnalyzer}>
-                  <FormGroup label="Namespaces" fieldId="analyzer-namespaces-selector">
+                  <FormGroup label={t('analyzer.namespaces')} fieldId="analyzer-namespaces-selector">
                     <Flex gap={{ default: 'gapSm' }}>
                       <FlexItem>
                         <TextInput
                           value={analyzerNamespaceFilter}
                           id="analyzer-namespace-filter"
                           onChange={(_event, value) => setAnalyzerNamespaceFilter(value)}
-                          aria-label="Filter analyzer namespaces"
-                          placeholder="Filter namespaces"
+                          aria-label={t('analyzer.filterNamespaces')}
+                          placeholder={t('analyzer.filterNamespaces')}
                           isDisabled={isAnalyzerInProgress}
                         />
                       </FlexItem>
@@ -1343,7 +1361,7 @@ function App() {
                           onClick={selectFilteredAnalyzerNamespaces}
                           isDisabled={isAnalyzerInProgress || filteredAnalyzerNamespaces.length === 0}
                         >
-                          Select filtered
+                          {t('analyzer.selectFiltered')}
                         </Button>
                       </FlexItem>
                       <FlexItem>
@@ -1353,7 +1371,7 @@ function App() {
                           onClick={clearAllAnalyzerNamespaces}
                           isDisabled={isAnalyzerInProgress || selectedAnalyzerNamespaces.length === 0}
                         >
-                          Clear all
+                          {t('analyzer.clearAll')}
                         </Button>
                       </FlexItem>
                       <FlexItem>
@@ -1363,7 +1381,7 @@ function App() {
                           onClick={loadAnalyzerNamespaces}
                           isDisabled={isAnalyzerInProgress || isLoadingAnalyzerNamespaces}
                         >
-                          {isLoadingAnalyzerNamespaces ? 'Refreshing...' : 'Refresh'}
+                          {isLoadingAnalyzerNamespaces ? t('common.refreshing') : t('common.refresh')}
                         </Button>
                       </FlexItem>
                     </Flex>
@@ -1373,7 +1391,7 @@ function App() {
                     <div className="namespace-selector-list" id="analyzer-namespaces-selector">
                       {isLoadingAnalyzerNamespaces ? <Spinner size="md" /> : null}
                       {!isLoadingAnalyzerNamespaces && filteredAnalyzerNamespaces.length === 0 ? (
-                        <small>No namespaces found.</small>
+                        <small>{t('analyzer.noNamespaces')}</small>
                       ) : null}
                       {!isLoadingAnalyzerNamespaces
                         ? filteredAnalyzerNamespaces.map((namespace) => (
@@ -1389,17 +1407,17 @@ function App() {
                         : null}
                     </div>
                     <small id="analyzer-namespaces">
-                      Selected: {selectedAnalyzerNamespaces.length}
+                      {t('common.selected')}: {selectedAnalyzerNamespaces.length}
                       {selectedAnalyzerNamespaces.length > 0 ? ` (${selectedAnalyzerNamespacesText})` : ''}
                     </small>
                   </FormGroup>
-                  <FormGroup label="Mode" fieldId="run-mode">
+                  <FormGroup label={t('analyzer.mode')} fieldId="run-mode">
                     <Flex direction={{ default: 'column' }}>
                       <FlexItem>
                         <Radio
                           id="mode-predictive"
                           name="mode"
-                          label="Machine Learning"
+                          label={t('analyzer.modeMl')}
                           isChecked={mode === 'predictive'}
                           onChange={() => setMode('predictive')}
                         />
@@ -1408,7 +1426,7 @@ function App() {
                         <Radio
                           id="mode-generative"
                           name="mode"
-                          label="LLM"
+                          label={t('analyzer.modeLlm')}
                           isChecked={mode === 'generative'}
                           onChange={() => setMode('generative')}
                         />
@@ -1421,29 +1439,29 @@ function App() {
                       className="collect-run-button"
                       isDisabled={isAnalyzerInProgress || selectedAnalyzerNamespaces.length === 0}
                     >
-                      {isAnalyzerInProgress ? <Spinner size="md" /> : 'Run'}
+                      {isAnalyzerInProgress ? <Spinner size="md" /> : t('common.run')}
                     </Button>
                   </div>
                   {hasAnalyzerStarted ? (
                     <div className="collection-progress" aria-live="polite">
                       <Progress
                         value={analyzerProgress}
-                        title="Analyzer progress"
+                        title={t('analyzer.progress')}
                         measureLocation="inside"
                       />
                       <p className="collection-progress-message">
                         {isAnalyzerInProgress
-                          ? 'Analyzing data. Status updates every 2 seconds.'
-                          : 'Analysis completed.'}
+                          ? t('analyzer.analyzing')
+                          : t('analyzer.analysisCompleted')}
                       </p>
                       {analyzerCompletionMessage ? (
-                        <Alert isInline variant="success" title={analyzerCompletionMessage} />
+                        <Alert isInline variant="success" title={t(analyzerCompletionMessage)} />
                       ) : null}
                       {analyzerStatusError ? (
                         <Alert
                           isInline
                           variant="warning"
-                          title="Could not update analyzer status. Retrying in 2 seconds."
+                          title={t('analyzer.statusRetry')}
                         >
                           {analyzerStatusError}
                         </Alert>
@@ -1452,7 +1470,7 @@ function App() {
                         <Alert
                           isInline
                           variant="warning"
-                          title="Could not update Predictive AI status. Retrying in 2 seconds."
+                          title={t('analyzer.predictiveStatusRetry')}
                         >
                           {predictiveStatusError}
                         </Alert>
