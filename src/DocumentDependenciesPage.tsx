@@ -397,6 +397,22 @@ function DocumentDependenciesPage({
     }
   }
 
+  async function handleReportSelection(reportName: string) {
+    if (!selectedReportName || reportName === selectedReportName) {
+      await selectReport(reportName)
+      return
+    }
+
+    if (!isDirty) {
+      await selectReport(reportName)
+      return
+    }
+
+    if (window.confirm(t('reports.switchReportWarning'))) {
+      await selectReport(reportName)
+    }
+  }
+
   async function selectReport(reportName: string) {
     const loadSequence = ++reportLoadSequence.current
     setSelectedReportName(reportName)
@@ -494,6 +510,9 @@ function DocumentDependenciesPage({
     }
   }
 
+  const selectedAuthorCount = authors.filter((author) => authorIds.includes(author.id)).length
+  const selectedCustomerCount = customers.filter((customer) => costumersListIds.includes(customer.id)).length
+
   const cards: Array<{ kind: Exclude<DialogKind, null>; title: string; icon: ReactNode; entries: Array<{ id: string; label: string }> }> = [
     { kind: 'author', title: t('reports.authors'), icon: <UserIcon className="section-title-icon" />, entries: authors.map((item) => ({ id: item.id, label: item.name })) },
     { kind: 'customer', title: t('reports.customers'), icon: <UsersIcon className="section-title-icon" />, entries: customers.map((item) => ({ id: item.id, label: item.name })) },
@@ -508,6 +527,22 @@ function DocumentDependenciesPage({
     || !sameIdSet(baseline.authorIds, authorIds)
     || !sameIdSet(baseline.costumersListIds, costumersListIds)
     || baseline.markdownContent !== markdownContent
+
+  const documentStatusTitle = selectedReportName
+    ? (documentStatusByReport.get(selectedReportName)?.isVersioned
+      ? t('reports.versioned', { version: (documentStatusByReport.get(selectedReportName)?.versionNumber ?? 0).toFixed(1) })
+      : isDirty
+        ? t('reports.pendingChanges')
+        : t('reports.draft'))
+    : null
+
+  const documentStatusVariant: 'success' | 'warning' | 'info' = selectedReportName
+    ? (documentStatusByReport.get(selectedReportName)?.isVersioned
+      ? 'success'
+      : isDirty
+        ? 'warning'
+        : 'info')
+    : 'info'
 
   function renderStatusLabel(reportName: string) {
     const status = documentStatusByReport.get(reportName)
@@ -528,10 +563,37 @@ function DocumentDependenciesPage({
   return <PageSection>
     {error ? <Alert isInline variant="danger" title={t('reports.dependencyError')}>{error}</Alert> : null}
     <div className="dependency-grid">
-      {cards.map((card) => <Card key={card.kind} className="pf-v5-c-card dependency-card" isCompact>
-        <CardHeader><div className="reports-page-heading"><Title headingLevel="h2" size="lg"><span className="section-title">{card.icon}{card.title}</span></Title><Button variant="primary" icon={<PlusIcon />} onClick={() => openDialog(card.kind)}>{t('reports.add')}</Button></div></CardHeader>
-        <CardBody>{isLoading ? <Spinner size="md" /> : card.entries.length ? <ul className="dependency-list">{(card.kind === 'author' ? authors : customers).map((person) => <li key={person.id}><span>{person.name}</span><Button variant="plain" aria-label={t('reports.removePerson', { name: person.name })} icon={<TrashIcon />} onClick={() => void removePerson(card.kind, person)} isDisabled={deletingPersonId !== null} isLoading={deletingPersonId === person.id} /></li>)}</ul> : <small>{t('reports.noRecords')}</small>}</CardBody>
-      </Card>)}
+      {cards.map((card) => {
+        const selectedCount = card.kind === 'author' ? selectedAuthorCount : selectedCustomerCount
+        const emptyMessage = card.kind === 'author' ? t('reports.noAuthors') : t('reports.noCustomers')
+        const selectionHint = card.kind === 'author' ? t('reports.selectAuthors') : t('reports.selectCustomers')
+
+        return (
+          <Card key={card.kind} className="pf-v5-c-card dependency-card" isCompact>
+            <CardHeader>
+              <div className="reports-page-heading">
+                <Title headingLevel="h2" size="lg"><span className="section-title">{card.icon}{card.title}</span></Title>
+                <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+                  <FlexItem>
+                    <Label color={selectedCount > 0 ? 'blue' : 'grey'} isCompact>
+                      {t('common.selected')}: {selectedCount}
+                    </Label>
+                  </FlexItem>
+                  <Button variant="primary" icon={<PlusIcon />} onClick={() => openDialog(card.kind)}>{t('reports.add')}</Button>
+                </Flex>
+              </div>
+            </CardHeader>
+            <CardBody>
+              {isLoading ? <Spinner size="md" /> : card.entries.length ? (
+                <>
+                  <small>{selectionHint}</small>
+                  <ul className="dependency-list">{(card.kind === 'author' ? authors : customers).map((person) => <li key={person.id}><span>{person.name}</span><Button variant="plain" aria-label={t('reports.removePerson', { name: person.name })} icon={<TrashIcon />} onClick={() => void removePerson(card.kind, person)} isDisabled={deletingPersonId !== null} isLoading={deletingPersonId === person.id} /></li>)}</ul>
+                </>
+              ) : <small>{emptyMessage}</small>}
+            </CardBody>
+          </Card>
+        )
+      })}
     </div>
     <Card className="pf-v5-c-card document-control-card">
       <CardHeader>
@@ -545,6 +607,11 @@ function DocumentDependenciesPage({
       <CardBody>
         {reportsError ? <Alert isInline variant="warning" title={t('reports.couldNotLoadReports')}>{reportsError}</Alert> : null}
         {documentMessage ? <Alert isInline variant="info" title={documentMessage} /> : null}
+        {selectedReportName && !isLoadingMarkdown && isDirty ? (
+          <Alert isInline variant="warning" title={t('reports.pendingChanges')}>
+            {t('reports.pendingChangesBody')}
+          </Alert>
+        ) : null}
         <div className="reports-workspace">
           <div className="reports-list-panel">
             {isLoadingReports ? (
@@ -579,7 +646,7 @@ function DocumentDependenciesPage({
                             />
                           </Tooltip>
                         }
-                        onClick={() => { void selectReport(report.name) }}
+                        onClick={() => { void handleReportSelection(report.name) }}
                       >
                         {report.name}
                       </MenuItem>
@@ -621,6 +688,12 @@ function DocumentDependenciesPage({
             {!selectedReportName && !isLoadingMarkdown ? (
               <p className="report-editor-empty">{t('reports.chooseReport')}</p>
             ) : null}
+            {selectedReportName && !isLoadingMarkdown && (authors.length === 0 || customers.length === 0) ? (
+              <Alert isInline variant="info" title={t('reports.selectAuthors')}>
+                {authors.length === 0 ? <p>{t('reports.noAuthors')}</p> : null}
+                {customers.length === 0 ? <p>{t('reports.noCustomers')}</p> : null}
+              </Alert>
+            ) : null}
             {isLoadingMarkdown ? (
               <div className="report-editor-loading">
                 <Spinner size="lg" aria-label={t('reports.loadingReport')} />
@@ -628,6 +701,13 @@ function DocumentDependenciesPage({
             ) : null}
             {selectedReportName && !isLoadingMarkdown ? (
               <Form className="document-control-form" onSubmit={(event) => { event.preventDefault(); void submitDocument() }}>
+                <Alert isInline variant={documentStatusVariant} title={documentStatusTitle ?? t('reports.selectReport')}>
+                  {documentStatusByReport.get(selectedReportName)?.isVersioned
+                    ? t('reports.documentExists', { version: (documentStatusByReport.get(selectedReportName)?.versionNumber ?? 0).toFixed(1) })
+                    : isDirty
+                      ? t('reports.pendingChangesBody')
+                      : t('reports.versionHelp')}
+                </Alert>
                 <FormGroup label={t('reports.documentName')} fieldId="document-name">
                   <TextInput id="document-name" value={documentName} isDisabled readOnlyVariant="default" />
                   <small>{t('reports.documentNameHelp')}</small>
@@ -680,7 +760,7 @@ function DocumentDependenciesPage({
                 <div className="document-control-form__actions">
                   <Button
                     type="submit"
-                    variant="primary"
+                    variant={isDirty ? 'primary' : 'secondary'}
                     isLoading={isSavingDocument}
                     isDisabled={isSavingDocument || isCheckingExistingDocument || !isDirty}
                   >
