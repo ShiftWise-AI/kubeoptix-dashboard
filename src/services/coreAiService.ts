@@ -1,4 +1,4 @@
-import { CORE_AI_ANALYSIS_PATH, CORE_AI_REQUEST_TIMEOUT_MS } from '../config/api'
+import { CORE_AI_REPORTS_PATH, CORE_AI_REQUEST_TIMEOUT_MS } from '../config/api'
 import { ApiRequestError, executeRequest, type ApiResult } from './httpClient'
 
 export type PredictiveAnalysisRequest = {
@@ -31,7 +31,7 @@ export async function runPredictiveAnalysis(
 ): Promise<PredictiveAnalysisResult> {
   const result = await executeRequest(
     'POST',
-    CORE_AI_ANALYSIS_PATH,
+    CORE_AI_REPORTS_PATH,
     buildPayload(request),
     { timeoutMs: CORE_AI_REQUEST_TIMEOUT_MS },
   )

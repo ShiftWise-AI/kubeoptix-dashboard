@@ -46,7 +46,7 @@ import {
   ANALYZER_ASSESSMENT_NAMESPACES_PATH,
   ANALYZER_REPORT_FILES_PATH,
   ANALYZER_STATUS_PATH,
-  CORE_AI_REPORT_STATUS_PATH,
+  CORE_AI_REPORTS_PATH,
   getApiPath,
 } from './config/api'
 import { ApiRequestError, executeRequest } from './services/httpClient'
@@ -315,7 +315,7 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
 // Removes the raw report file from disk via the core-ai-api report deletion endpoint.
 // The API expects the filename as a path segment (DELETE /reports/{fileName}), not a JSON body.
 async function deleteReportContent(fileName: string): Promise<void> {
-  const response = await fetch(`${CORE_AI_REPORT_STATUS_PATH}/${encodeURIComponent(fileName)}`, {
+  const response = await fetch(`${CORE_AI_REPORTS_PATH}/${encodeURIComponent(fileName)}`, {
     method: 'DELETE',
   })
 
@@ -701,7 +701,7 @@ function App() {
       try {
         const result = await executeRequest(
           'GET',
-          `${CORE_AI_REPORT_STATUS_PATH}/${encodeURIComponent(executionId)}/status`,
+          `${CORE_AI_REPORTS_PATH}/${encodeURIComponent(executionId)}/status`,
         )
         const progress = normalizeProgressResponse(result.payload, t('harvester.invalidProgress'))
 
