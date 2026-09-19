@@ -14,6 +14,7 @@ import {
   saveDocument,
   type Person,
 } from './services/documentVersionService'
+import { useI18n } from './i18n'
 
 type DialogKind = 'author' | 'customer' | null
 
@@ -77,6 +78,7 @@ function DocumentDependenciesPage({
   saveReportContent,
   deleteReportContent,
 }: DocumentDependenciesPageProps) {
+  const { t } = useI18n()
   const [authors, setAuthors] = useState<Person[]>([])
   const [customers, setCustomers] = useState<Person[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -147,7 +149,7 @@ function DocumentDependenciesPage({
       setCustomers(dependencies.customers)
       setError(null)
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load document dependencies.')
+      setError(loadError instanceof Error ? loadError.message : t('reports.couldNotLoadDependencies'))
     } finally {
       setIsLoading(false)
     }
@@ -220,7 +222,7 @@ function DocumentDependenciesPage({
       setDialogKind(null)
       await loadDependencies()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save the dependency.')
+      setError(saveError instanceof Error ? saveError.message : t('reports.couldNotSaveDependency'))
     } finally { setIsSaving(false) }
   }
 
@@ -233,7 +235,7 @@ function DocumentDependenciesPage({
     } catch (deleteError) {
       setError(deleteError instanceof Error
         ? deleteError.message
-        : `Could not remove ${kind === 'author' ? 'the author' : 'the customer'}.`)
+        : t(kind === 'author' ? 'reports.couldNotRemoveAuthor' : 'reports.couldNotRemoveCustomer'))
     } finally {
       setDeletingPersonId(null)
     }
@@ -241,7 +243,7 @@ function DocumentDependenciesPage({
 
   async function submitDocument() {
     if (!title.trim() || !description.trim() || !projectManager.trim() || !costumer.trim() || authorIds.length === 0 || costumersListIds.length === 0 || !selectedReportName || !markdownContent.trim()) {
-      setDocumentMessage('Complete all document fields (select at least one author and one customer) before saving.')
+      setDocumentMessage(t('reports.completeFields'))
       return
     }
 
@@ -287,7 +289,7 @@ function DocumentDependenciesPage({
         costumersListIds,
         markdownContent,
       })
-      setDocumentMessage(`Document version ${nextVersion.toFixed(1)} saved. You can now export it to PDF.`)
+      setDocumentMessage(t('reports.versionSaved', { version: nextVersion.toFixed(1) }))
       // Flip the report's list indicator from "draft" to "versioned" immediately.
       setDocumentStatusByReport((previous) => {
         const next = new Map(previous)
@@ -304,7 +306,7 @@ function DocumentDependenciesPage({
       await loadDbReportBaseNames()
       onRefreshReports()
     } catch (saveError) {
-      setDocumentMessage(saveError instanceof Error ? saveError.message : 'Could not save the document version.')
+      setDocumentMessage(saveError instanceof Error ? saveError.message : t('reports.couldNotSaveVersion'))
     } finally {
       setIsSavingDocument(false)
     }
@@ -334,7 +336,7 @@ function DocumentDependenciesPage({
       downloadLink.remove()
       URL.revokeObjectURL(downloadUrl)
     } catch (exportError) {
-      setPdfExportError(exportError instanceof Error ? exportError.message : 'Could not export the report as PDF.')
+      setPdfExportError(exportError instanceof Error ? exportError.message : t('reports.couldNotExportPdf'))
     } finally {
       setIsExportingPdf(false)
     }
@@ -389,7 +391,7 @@ function DocumentDependenciesPage({
       await loadDbReportBaseNames()
       onRefreshReports()
     } catch (deleteError) {
-      setDeleteReportError(deleteError instanceof Error ? deleteError.message : 'Could not delete the report.')
+      setDeleteReportError(deleteError instanceof Error ? deleteError.message : t('reports.couldNotDelete'))
     } finally {
       setIsDeletingReport(false)
     }
@@ -469,11 +471,10 @@ function DocumentDependenciesPage({
           projectManager: existingDocument.projectManager,
         })
         setDocumentMessage(
-          `This document already exists (last saved version ${existingDocument.versionNumber.toFixed(1)}). `
-          + 'Edit any field and save to create a new version.',
+          t('reports.documentExists', { version: existingDocument.versionNumber.toFixed(1) }),
         )
       } else if (content === null) {
-        throw new Error('Could not load the report content.')
+        throw new Error(t('reports.couldNotLoadContent'))
       } else {
         setProjectManager('')
         setCostumer('')
@@ -483,7 +484,7 @@ function DocumentDependenciesPage({
       }
     } catch (loadError) {
       if (loadSequence === reportLoadSequence.current) {
-        setMarkdownContentError(loadError instanceof Error ? loadError.message : 'Could not load the report content.')
+        setMarkdownContentError(loadError instanceof Error ? loadError.message : t('reports.couldNotLoadContent'))
       }
     } finally {
       if (loadSequence === reportLoadSequence.current) {
@@ -494,8 +495,8 @@ function DocumentDependenciesPage({
   }
 
   const cards: Array<{ kind: Exclude<DialogKind, null>; title: string; icon: ReactNode; entries: Array<{ id: string; label: string }> }> = [
-    { kind: 'author', title: 'Authors', icon: <UserIcon className="section-title-icon" />, entries: authors.map((item) => ({ id: item.id, label: item.name })) },
-    { kind: 'customer', title: 'Customers', icon: <UsersIcon className="section-title-icon" />, entries: customers.map((item) => ({ id: item.id, label: item.name })) },
+    { kind: 'author', title: t('reports.authors'), icon: <UserIcon className="section-title-icon" />, entries: authors.map((item) => ({ id: item.id, label: item.name })) },
+    { kind: 'customer', title: t('reports.customers'), icon: <UsersIcon className="section-title-icon" />, entries: customers.map((item) => ({ id: item.id, label: item.name })) },
   ]
 
   // Save is only relevant once something differs from the last loaded/saved state.
@@ -513,47 +514,47 @@ function DocumentDependenciesPage({
     if (status?.isVersioned) {
       return (
         <Label isCompact status="success" icon={<CheckCircleIcon />}>
-          {`Versioned v${status.versionNumber.toFixed(1)}`}
+          {t('reports.versioned', { version: status.versionNumber.toFixed(1) })}
         </Label>
       )
     }
     return (
       <Label isCompact status="warning" icon={<PencilAltIcon />}>
-        Draft
+        {t('reports.draft')}
       </Label>
     )
   }
 
   return <PageSection>
-    {error ? <Alert isInline variant="danger" title="Document dependency error">{error}</Alert> : null}
+    {error ? <Alert isInline variant="danger" title={t('reports.dependencyError')}>{error}</Alert> : null}
     <div className="dependency-grid">
       {cards.map((card) => <Card key={card.kind} className="pf-v5-c-card dependency-card" isCompact>
-        <CardHeader><div className="reports-page-heading"><Title headingLevel="h2" size="lg"><span className="section-title">{card.icon}{card.title}</span></Title><Button variant="primary" icon={<PlusIcon />} onClick={() => openDialog(card.kind)}>Add</Button></div></CardHeader>
-        <CardBody>{isLoading ? <Spinner size="md" /> : card.entries.length ? <ul className="dependency-list">{(card.kind === 'author' ? authors : customers).map((person) => <li key={person.id}><span>{person.name}</span><Button variant="plain" aria-label={`Remove ${person.name}`} icon={<TrashIcon />} onClick={() => void removePerson(card.kind, person)} isDisabled={deletingPersonId !== null} isLoading={deletingPersonId === person.id} /></li>)}</ul> : <small>No records found.</small>}</CardBody>
+        <CardHeader><div className="reports-page-heading"><Title headingLevel="h2" size="lg"><span className="section-title">{card.icon}{card.title}</span></Title><Button variant="primary" icon={<PlusIcon />} onClick={() => openDialog(card.kind)}>{t('reports.add')}</Button></div></CardHeader>
+        <CardBody>{isLoading ? <Spinner size="md" /> : card.entries.length ? <ul className="dependency-list">{(card.kind === 'author' ? authors : customers).map((person) => <li key={person.id}><span>{person.name}</span><Button variant="plain" aria-label={t('reports.removePerson', { name: person.name })} icon={<TrashIcon />} onClick={() => void removePerson(card.kind, person)} isDisabled={deletingPersonId !== null} isLoading={deletingPersonId === person.id} /></li>)}</ul> : <small>{t('reports.noRecords')}</small>}</CardBody>
       </Card>)}
     </div>
     <Card className="pf-v5-c-card document-control-card">
       <CardHeader>
         <div className="reports-page-heading">
-          <Title headingLevel="h2" size="xl"><span className="section-title"><FileInvoiceIcon className="section-title-icon" />Reports</span></Title>
+          <Title headingLevel="h2" size="xl"><span className="section-title"><FileInvoiceIcon className="section-title-icon" />{t('reports.title')}</span></Title>
           <Button type="button" variant="secondary" onClick={onRefreshReports} isDisabled={isLoadingReports}>
-            {isLoadingReports ? 'Refreshing...' : 'Refresh'}
+            {isLoadingReports ? t('common.refreshing') : t('common.refresh')}
           </Button>
         </div>
       </CardHeader>
       <CardBody>
-        {reportsError ? <Alert isInline variant="warning" title="Could not load reports">{reportsError}</Alert> : null}
+        {reportsError ? <Alert isInline variant="warning" title={t('reports.couldNotLoadReports')}>{reportsError}</Alert> : null}
         {documentMessage ? <Alert isInline variant="info" title={documentMessage} /> : null}
         <div className="reports-workspace">
           <div className="reports-list-panel">
             {isLoadingReports ? (
               <div className="assessment-tree-loading">
-                <Spinner size="lg" aria-label="Loading reports" />
+                <Spinner size="lg" aria-label={t('reports.loadingReports')} />
               </div>
             ) : null}
-            {!isLoadingReports && mergedReports.length === 0 ? <small>No reports found.</small> : null}
+            {!isLoadingReports && mergedReports.length === 0 ? <small>{t('reports.noReports')}</small> : null}
             {!isLoadingReports && mergedReports.length > 0 ? (
-              <Menu className="report-files-menu" aria-label="Analyzer report files">
+              <Menu className="report-files-menu" aria-label={t('reports.reportFiles')}>
                 <MenuContent>
                   <MenuList>
                     {mergedReports.map((report) => (
@@ -569,10 +570,10 @@ function DocumentDependenciesPage({
                           </Flex>
                         }
                         actions={
-                          <Tooltip content="Delete report">
+                          <Tooltip content={t('reports.deleteReport')}>
                             <Button
                               variant="plain"
-                              aria-label={`Delete ${report.name}`}
+                              aria-label={`${t('reports.deleteReport')} ${report.name}`}
                               icon={<TrashIcon />}
                               onClick={(event) => { event.stopPropagation(); requestDeleteReport(report.name) }}
                             />
@@ -593,7 +594,7 @@ function DocumentDependenciesPage({
               <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
                 <FlexItem>
                   <Title headingLevel="h3" size="lg">
-                    {selectedReportName || 'Select a report'}
+                    {selectedReportName || t('reports.selectReport')}
                   </Title>
                 </FlexItem>
                 {selectedReportName && !isLoadingMarkdown ? (
@@ -603,44 +604,41 @@ function DocumentDependenciesPage({
               {selectedReportName && !isLoadingMarkdown ? (
                 <div className="report-editor-actions">
                   <Button type="button" variant="secondary" icon={<EyeIcon />} onClick={() => setIsPreviewOpen(true)}>
-                    View
+                    {t('reports.preview')}
                   </Button>
                   <Button type="button" variant="secondary" icon={<DownloadIcon />} onClick={downloadMarkdown}>
-                    Download
+                    {t('reports.download')}
                   </Button>
                 </div>
               ) : null}
             </div>
             {deleteReportError ? (
-              <Alert isInline variant="danger" title="Could not delete the report">{deleteReportError}</Alert>
-            ) : null}
-            {isCheckingExistingDocument ? (
-              <small><Spinner size="sm" /> Checking if this document already exists...</small>
+              <Alert isInline variant="danger" title={t('reports.couldNotDeleteTitle')}>{deleteReportError}</Alert>
             ) : null}
             {markdownContentError ? (
-              <Alert isInline variant="danger" title="Could not load the report">{markdownContentError}</Alert>
+              <Alert isInline variant="danger" title={t('reports.couldNotLoadTitle')}>{markdownContentError}</Alert>
             ) : null}
-            {!selectedReportName ? (
-              <p className="report-editor-empty">Choose a report from the list to edit and save a document version.</p>
+            {!selectedReportName && !isLoadingMarkdown ? (
+              <p className="report-editor-empty">{t('reports.chooseReport')}</p>
             ) : null}
             {isLoadingMarkdown ? (
               <div className="report-editor-loading">
-                <Spinner size="lg" aria-label="Loading report" />
+                <Spinner size="lg" aria-label={t('reports.loadingReport')} />
               </div>
             ) : null}
             {selectedReportName && !isLoadingMarkdown ? (
               <Form className="document-control-form" onSubmit={(event) => { event.preventDefault(); void submitDocument() }}>
-                <FormGroup label="Document name" fieldId="document-name">
+                <FormGroup label={t('reports.documentName')} fieldId="document-name">
                   <TextInput id="document-name" value={documentName} isDisabled readOnlyVariant="default" />
-                  <small>Unique identifier derived from the report file name; cannot be changed.</small>
+                  <small>{t('reports.documentNameHelp')}</small>
                 </FormGroup>
-                <FormGroup label="Document title" isRequired fieldId="document-title"><TextInput id="document-title" value={title} onChange={(_event, value) => setTitle(value)} /></FormGroup>
-                <FormGroup label="Description" isRequired fieldId="document-description"><TextInput id="document-description" value={description} onChange={(_event, value) => setDescription(value)} /></FormGroup>
-                <FormGroup label="Project manager" isRequired fieldId="document-project-manager"><TextInput id="document-project-manager" value={projectManager} onChange={(_event, value) => setProjectManager(value)} /></FormGroup>
-                <FormGroup label="Costumer" isRequired fieldId="document-costumer"><TextInput id="document-costumer" value={costumer} onChange={(_event, value) => setCostumer(value)} /></FormGroup>
-                <FormGroup label="Author" isRequired fieldId="document-author">
+                <FormGroup label={t('reports.documentTitle')} isRequired fieldId="document-title"><TextInput id="document-title" value={title} onChange={(_event, value) => setTitle(value)} /></FormGroup>
+                <FormGroup label={t('reports.description')} isRequired fieldId="document-description"><TextInput id="document-description" value={description} onChange={(_event, value) => setDescription(value)} /></FormGroup>
+                <FormGroup label={t('reports.projectManager')} isRequired fieldId="document-project-manager"><TextInput id="document-project-manager" value={projectManager} onChange={(_event, value) => setProjectManager(value)} /></FormGroup>
+                <FormGroup label={t('reports.costumer')} isRequired fieldId="document-costumer"><TextInput id="document-costumer" value={costumer} onChange={(_event, value) => setCostumer(value)} /></FormGroup>
+                <FormGroup label={t('reports.author')} isRequired fieldId="document-author">
                   <div className="namespace-selector-list" id="document-author">
-                    {authors.length === 0 ? <small>No authors available.</small> : null}
+                    {authors.length === 0 ? <small>{t('reports.noAuthors')}</small> : null}
                     {authors.map((author) => (
                       <Checkbox
                         key={author.id}
@@ -651,11 +649,11 @@ function DocumentDependenciesPage({
                       />
                     ))}
                   </div>
-                  <small>Select one or more authors.</small>
+                  <small>{t('reports.selectAuthors')}</small>
                 </FormGroup>
-                <FormGroup label="Costumers list" isRequired fieldId="document-costumers-list">
+                <FormGroup label={t('reports.costumersList')} isRequired fieldId="document-costumers-list">
                   <div className="namespace-selector-list" id="document-costumers-list">
-                    {customers.length === 0 ? <small>No customers available.</small> : null}
+                    {customers.length === 0 ? <small>{t('reports.noCustomers')}</small> : null}
                     {customers.map((customer) => (
                       <Checkbox
                         key={customer.id}
@@ -666,18 +664,19 @@ function DocumentDependenciesPage({
                       />
                     ))}
                   </div>
-                  <small>Select one or more customers.</small>
+                  <small>{t('reports.selectCustomers')}</small>
                 </FormGroup>
-                <FormGroup className="document-control-form__markdown" label="Markdown content" isRequired fieldId="document-markdown-content">
+                <FormGroup className="document-control-form__markdown" label={t('reports.markdownContent')} isRequired fieldId="document-markdown-content">
                   <TextArea
                     id="document-markdown-content"
                     className="report-markdown-editor"
                     value={markdownContent}
-                    onChange={(_event, value) => setMarkdownContent(value)}
                     resizeOrientation="vertical"
+                    autoResize
+                    onChange={(_event, value) => setMarkdownContent(value)}
                   />
                 </FormGroup>
-                <small>Version number is calculated automatically by the API (0.1, 0.2, ... increasing per saved title).</small>
+                <small>{t('reports.versionHelp')}</small>
                 <div className="document-control-form__actions">
                   <Button
                     type="submit"
@@ -685,7 +684,7 @@ function DocumentDependenciesPage({
                     isLoading={isSavingDocument}
                     isDisabled={isSavingDocument || isCheckingExistingDocument || !isDirty}
                   >
-                    Save document version
+                    {t('reports.saveDocument')}
                   </Button>
                   {savedDocumentForExport ? (
                     <Button
@@ -695,11 +694,11 @@ function DocumentDependenciesPage({
                       onClick={() => void exportSavedDocumentPdf()}
                       isLoading={isExportingPdf}
                     >
-                      Export to PDF
+                      {t('reports.exportPdf')}
                     </Button>
                   ) : null}
                 </div>
-                {pdfExportError ? <Alert isInline variant="danger" title="Could not export the report as PDF">{pdfExportError}</Alert> : null}
+                {pdfExportError ? <Alert isInline variant="danger" title={t('reports.couldNotExportTitle')}>{pdfExportError}</Alert> : null}
               </Form>
             ) : null}
           </section>
@@ -712,20 +711,20 @@ function DocumentDependenciesPage({
       isOpen={isPreviewOpen}
       onClose={() => setIsPreviewOpen(false)}
     >
-      <ModalHeader title={selectedReportName || 'Report preview'} labelId="report-preview-modal-title" />
+      <ModalHeader title={selectedReportName || t('reports.reportPreview')} labelId="report-preview-modal-title" />
       <ModalBody id="report-preview-modal-description">
         <MarkdownViewer content={markdownContent} />
       </ModalBody>
       <ModalFooter>
-        <Button variant="link" onClick={() => setIsPreviewOpen(false)}>Close</Button>
+        <Button variant="link" onClick={() => setIsPreviewOpen(false)}>{t('common.close')}</Button>
       </ModalFooter>
     </Modal>
     <Modal variant={ModalVariant.medium} isOpen={dialogKind !== null} onClose={() => setDialogKind(null)}>
-      <ModalHeader title={`Add ${dialogKind ?? ''}`} />
+      <ModalHeader title={dialogKind === 'author' ? t('reports.addAuthor') : dialogKind === 'customer' ? t('reports.addCustomer') : ''} />
       <ModalBody><Form>
-        <FormGroup label="Name" isRequired><TextInput value={name} onChange={(_event, value) => setName(value)} /></FormGroup><FormGroup label="Position"><TextInput value={position} onChange={(_event, value) => setPosition(value)} /></FormGroup><FormGroup label="Email"><TextInput value={email} onChange={(_event, value) => setEmail(value)} /></FormGroup>
+        <FormGroup label={t('common.name')} isRequired><TextInput value={name} onChange={(_event, value) => setName(value)} /></FormGroup><FormGroup label={t('common.position')}><TextInput value={position} onChange={(_event, value) => setPosition(value)} /></FormGroup><FormGroup label={t('common.email')}><TextInput value={email} onChange={(_event, value) => setEmail(value)} /></FormGroup>
       </Form></ModalBody>
-      <ModalFooter><Button variant="primary" onClick={() => void submit()} isLoading={isSaving}>Save</Button><Button variant="link" onClick={() => setDialogKind(null)}>Cancel</Button></ModalFooter>
+      <ModalFooter><Button variant="primary" onClick={() => void submit()} isLoading={isSaving}>{t('common.save')}</Button><Button variant="link" onClick={() => setDialogKind(null)}>{t('common.cancel')}</Button></ModalFooter>
     </Modal>
     <Modal
       variant={ModalVariant.small}
@@ -733,27 +732,28 @@ function DocumentDependenciesPage({
       onClose={() => { if (!isDeletingReport) { setDeleteTargetReport(null) } }}
     >
       <ModalHeader
-        title="Do you want to perform this action?"
+        title={t('common.confirmActionTitle')}
         titleIconVariant="danger"
         labelId="delete-report-modal-title"
       />
       <ModalBody id="delete-report-modal-description">
-        This will permanently delete <strong>{deleteTargetReport}</strong>
+        {t('reports.deleteModalBefore')}{' '}
+        <strong>{deleteTargetReport}</strong>
         {documentStatusByReport.get(deleteTargetReport ?? '')?.isVersioned
-          ? ', including its versioned document record, '
-          : ' '}
-        from disk. This action cannot be undone.
+          ? t('reports.deleteModalAfterVersioned')
+          : t('reports.deleteModalAfterPlain')}
       </ModalBody>
       <ModalFooter>
         <Button variant="danger" onClick={() => void confirmDeleteReport()} isLoading={isDeletingReport}>
-          Yes, delete
+          {t('common.yesDelete')}
         </Button>
         <Button variant="link" onClick={() => setDeleteTargetReport(null)} isDisabled={isDeletingReport}>
-          Cancel
+          {t('common.cancel')}
         </Button>
       </ModalFooter>
     </Modal>
   </PageSection>
+
 }
 
 export default DocumentDependenciesPage

@@ -1,59 +1,44 @@
 # KubeOptix Dashboard
 
-React + TypeScript dashboard for operating the KubeOptix platform across harvester, analyzer, reporter, document versioning, and system settings workflows.
+React + TypeScript web application for operating the ShiftWise AI / KubeOptix assessment workflow. The dashboard coordinates data collection, analysis, report editing, document versioning, and system configuration through a PatternFly interface.
 
-## Overview
+## How the application works
 
-This frontend exposes a PatternFly interface for:
+The main workflow is intentionally sequential:
 
-- harvesting and reviewing assessment data;
-- running analyzer jobs in `Generativa` and `Preditiva` modes;
-- reviewing report documents and markdown content;
-- managing document metadata, authors, customers, and PDF export;
-- configuring system settings and branding assets;
-- proxying backend APIs through a single secure entrypoint.
+1. **Configurations**: create the single system-settings record, choose the language and default extraction method, configure model/API-key fields, and optionally upload a PNG, JPEG, WEBP, or SVG logo (maximum 2 MB). The operational workflow remains unavailable until this record exists.
+2. **Harvester**: select namespaces, start an assessment collection, monitor progress, inspect the collected assessment tree, and delete assessment data when required.
+3. **Analyzer**: select namespaces and run either generative analysis (LLM) or predictive analysis (machine learning). Long-running jobs are polled until completion.
+4. **Reports**: review generated Markdown reports, edit their content, preview or download Markdown, and save document versions with metadata.
 
-## Features
+The Reports screen also manages authors and customer lists. A document can use multiple authors and customers; the client represents each author/customer combination as a document record while keeping one report visible in the list. Saved reports are marked with their version, while unsaved reports remain drafts.
 
-### Harvester
+Saving a document writes the edited Markdown to the reporter service, creates the document/version records in the configuration service, and then removes the raw report file from the core AI report store. The saved document remains visible from the configuration database. A saved document can be exported as PDF; the dashboard rehydrates the report file before requesting the reporter PDF endpoint when the source file is no longer on disk.
 
-- list namespaces and available data sets;
-- trigger collection with `POST /collect`;
-- inspect collection status and progress;
-- clean up assessment data with `DELETE /assessment`;
-- browse the assessment file tree and rendered responses.
+## Backend services and proxy paths
 
-### Analyzer
+The browser only calls the dashboard's local paths. In development, Vite proxies these requests. In production, `server.mjs` performs the same proxying at runtime:
 
-- inspect namespaces for analyzer jobs;
-- run analysis in `Generativa` mode via the analyzer service;
-- run predictive analysis via the core AI service;
-- check status and list generated reports;
-- delete generated report artifacts.
+| Dashboard path | Upstream responsibility |
+| --- | --- |
+| `/api/harvester/*` and collection paths | Namespace discovery, collection, status, and assessment data |
+| `/api/analyzer/*` | Generative analysis, status, namespaces, and analyzer report listing |
+| `/api/reporter/*` | Markdown read/write and PDF rendering |
+| `/api/core-ai/*` | Predictive analysis and core AI operations |
+| `/api/reports/*` | Core AI report status and report-file deletion |
+| `/api/settings/*` | System settings, logo, authors, customer lists, documents, and versions |
 
-### Reports and document workflow
-
-- list markdown reports from the reporter service;
-- open the report preview in markdown format;
-- save and version document metadata in the settings/configuration API;
-- manage authors and customers used by document generation;
-- export the saved document to PDF.
-
-### Configuration and branding
-
-- manage system settings and language defaults;
-- store API keys and model selection;
-- upload or remove the custom organization logo;
-- keep the current settings synchronized with the backend.
+The proxy keeps upstream service URLs out of browser requests and provides one frontend entrypoint for the deployment.
 
 ## Tech stack
 
 - React 19
-- TypeScript
-- Vite
+- TypeScript in strict mode
+- Vite 8
 - PatternFly 6.6.1
 - Vitest for unit tests
-- Node.js server for production proxying
+- Node.js production server and API proxy
+- Podman, Helm, and OpenShift deployment support
 
 ## Project structure
 
@@ -63,8 +48,8 @@ This frontend exposes a PatternFly interface for:
 │   ├── App.tsx
 │   ├── ConfigurationsPage.tsx
 │   ├── DocumentDependenciesPage.tsx
-│   ├── services/
 │   ├── config/
+│   ├── services/
 │   └── ...
 ├── helm/
 │   └── kubeoptix-dashboard/
@@ -93,7 +78,20 @@ Start the development server:
 npm run dev
 ```
 
-The Vite app loads `.env.development` automatically. In development, browser requests are routed through local frontend endpoints and proxied to the upstream services without exposing direct backend access from the browser.
+The Vite app loads `.env.development` automatically. Open the URL printed by Vite, normally `http://localhost:5173`.
+
+Available commands:
+
+```bash
+npm run dev       # Start Vite in development mode
+npm run build     # Type-check and create dist/
+npm run preview   # Preview the Vite production build
+npm run start     # Serve dist/ through server.mjs on port 8080
+npm run test      # Run the Vitest suite once
+npm run lint      # Run oxlint
+```
+
+In development, the browser uses local frontend paths and Vite proxies requests to the upstream services without exposing their URLs to the client.
 
 ## Environment configuration
 
@@ -107,8 +105,11 @@ HARVESTER_API_URL=https://harvester-shiftwise-ai.apps-crc.testing
 ANALYZER_API_URL=https://analyzer-shiftwise-ai.apps-crc.testing
 REPORTER_API_URL=https://reporter-shiftwise-ai.apps-crc.testing
 CORE_AI_API_URL=https://core-ai-api-shiftwise-ai.apps-crc.testing
+SETTINGS_API_URL=http://localhost:8000
 TZ=UTC-3
 ```
+
+`SETTINGS_API_URL` is optional in the checked-in development file because Vite defaults it to `http://localhost:8000`, but it can be set explicitly when the configuration service is running elsewhere.
 
 ### OpenShift variables
 
@@ -124,18 +125,11 @@ SETTINGS_API_URL=http://configurations-api:8000
 TZ=America/Sao_Paulo
 ```
 
-The app also supports runtime proxying for:
-
-- `/api/harvester/*`
-- `/api/analyzer/*`
-- `/api/reporter/*`
-- `/api/core-ai/*`
-- `/api/reports`
-- `/api/settings/*`
+For the production server, `HARVESTER_API_URL` and `ANALYZER_API_URL` must be present because `server.mjs` constructs those URLs at startup. The other upstream URLs have container-friendly defaults, but setting all five explicitly is recommended.
 
 ## Production runtime
 
-The production server is implemented in `server.mjs` and serves the built frontend while proxying backend APIs at runtime. It exposes `/healthz` for readiness checks.
+The production server is implemented in `server.mjs`, serves the `dist/` frontend, proxies backend APIs at runtime, and listens on `0.0.0.0:8080`. It exposes `/healthz`, returning `{ "status": "ok" }`, for readiness and liveness probes.
 
 Build the app:
 
@@ -149,7 +143,7 @@ Run the compiled app locally with the production server:
 npm run start
 ```
 
-The server expects the runtime environment values to be available in the process environment, typically via a `.env` file or Kubernetes/OpenShift secret/config map.
+The server does not load `.env` files by itself. Provide runtime values through the shell, an environment manager, or a container/OpenShift `ConfigMap`.
 
 ## Container image
 
@@ -165,22 +159,34 @@ Run it locally with an environment file:
 podman run --env-file .env -p 8080:8080 kubeoptix-dashboard
 ```
 
+The image is built in two stages from UBI 10, serves the compiled app as the non-root `kubeoptix` user, exposes port `8080`, and uses a read-only root filesystem in the OpenShift workload.
+
 ## OpenShift deployment
 
-The project includes a Helm chart under `helm/kubeoptix-dashboard` that creates the required OpenShift resources:
+The project includes a Helm chart under `helm/kubeoptix-dashboard` that creates:
 
-- `ImageStream` and `BuildConfig` from the repository source;
-- `ConfigMap` from the OpenShift environment file;
-- single-replica `StatefulSet`;
-- `Service` and HTTPS `Route` with HTTP redirect;
-- `ValidatingAdmissionPolicy` preventing scale changes away from one replica.
+- an `ImageStream` and binary `BuildConfig` for the `Containerfile`;
+- a `ConfigMap` generated from the supplied OpenShift environment file;
+- a single-replica `StatefulSet` with `/healthz` probes;
+- a `Service` and HTTPS `Route` with HTTP-to-HTTPS redirect;
+- a `ValidatingAdmissionPolicy` and binding that prevent scaling away from one replica.
 
-The chart expects the installation namespace to already include the `github-auth` secret required by the build pipeline. The cluster must also allow creation of the admission policy resources.
+The chart requires `.Values.environmentFile`. The included `install.sh` supplies `.env.openshift` with `--set-file`, first installs the build-only resources, starts a binary build with `oc start-build`, and then installs the workload resources. The cluster must allow `BuildConfig`, `ImageStream`, `Route`, and admission-policy resources in the `shiftwise-ai` namespace.
 
 Install the chart:
 
 ```bash
 ./install.sh
+```
+
+The script requires `helm` and `oc`, access to the target OpenShift cluster, permission to create resources in `shiftwise-ai`, and a working internal registry/build configuration. To render or install the chart manually, pass the environment file explicitly:
+
+```bash
+helm upgrade --install kubeoptix-dashboard helm/kubeoptix-dashboard \
+  --namespace shiftwise-ai \
+  --create-namespace \
+  --set-file environmentFile=.env.openshift \
+  --set buildOnly=false
 ```
 
 Watch the build and rollout:
@@ -204,7 +210,15 @@ Run the automated checks:
 ```bash
 npm run test
 npm run build
+npm run lint
 ```
 
-These commands verify the current frontend and service integration logic before deployment.
+These commands verify the frontend, service integration tests, type-check/build output, and lint rules before deployment. For an OpenShift rollout, also verify readiness and the generated route:
+
+```bash
+oc rollout status statefulset/kubeoptix-dashboard -n shiftwise-ai
+oc get pods -n shiftwise-ai -l app.kubernetes.io/name=kubeoptix-dashboard
+oc get route kubeoptix-dashboard -n shiftwise-ai \
+  -o jsonpath='https://{.spec.host}{"\n"}'
+```
 

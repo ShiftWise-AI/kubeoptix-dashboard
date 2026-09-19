@@ -42,31 +42,32 @@ import {
   type SystemSettingsInput,
 } from './services/settingsService'
 import { CogIcon } from '@patternfly/react-icons'
+import { DEFAULT_LANGUAGE, useI18n, type TranslationKey } from './i18n'
 
 type ConfigurationsPageProps = {
   onSettingsChange: (settings: SystemSettings | null) => void
 }
 
-const LANGUAGE_OPTIONS: { value: Language; label: string }[] = [
-  { value: 'en', label: 'English' },
-  { value: 'pt', label: 'Português' },
-  { value: 'es', label: 'Español' },
-  { value: 'it', label: 'Italiano' },
+const LANGUAGE_OPTION_KEYS: { value: Language; labelKey: TranslationKey }[] = [
+  { value: 'pt', labelKey: 'settings.languagePt' },
+  { value: 'en', labelKey: 'settings.languageEn' },
+  { value: 'es', labelKey: 'settings.languageEs' },
+  { value: 'it', labelKey: 'settings.languageIt' },
 ]
 
-const STATUS_OPTIONS: { value: SettingsStatus; label: string }[] = [
-  { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
+const STATUS_OPTION_KEYS: { value: SettingsStatus; labelKey: TranslationKey }[] = [
+  { value: 'active', labelKey: 'settings.statusActive' },
+  { value: 'inactive', labelKey: 'settings.statusInactive' },
 ]
 
-const EXTRACTION_METHOD_OPTIONS: { value: ExtractionMethod; label: string }[] = [
-  { value: 'ml', label: 'Machine learning' },
-  { value: 'llm', label: 'LLM' },
+const EXTRACTION_METHOD_OPTION_KEYS: { value: ExtractionMethod; labelKey: TranslationKey }[] = [
+  { value: 'ml', labelKey: 'settings.extractionMl' },
+  { value: 'llm', labelKey: 'settings.extractionLlm' },
 ]
 
 function createEmptyFormState(): SystemSettingsInput {
   return {
-    language: 'en',
+    language: DEFAULT_LANGUAGE,
     cursorApiKey: '',
     cursorModel: '',
     llmApiKey: '',
@@ -88,7 +89,29 @@ function toFormState(settings: SystemSettings): SystemSettingsInput {
   }
 }
 
+function languageLabelKey(language: Language): TranslationKey {
+  switch (language) {
+    case 'pt':
+      return 'settings.languagePt'
+    case 'en':
+      return 'settings.languageEn'
+    case 'es':
+      return 'settings.languageEs'
+    case 'it':
+      return 'settings.languageIt'
+  }
+}
+
+function statusLabelKey(status: SettingsStatus): TranslationKey {
+  return status === 'active' ? 'settings.statusActive' : 'settings.statusInactive'
+}
+
+function extractionLabelKey(method: ExtractionMethod): TranslationKey {
+  return method === 'ml' ? 'settings.extractionMl' : 'settings.extractionLlm'
+}
+
 function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
+  const { t, setLanguage } = useI18n()
   const [settings, setSettings] = useState<SystemSettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -133,9 +156,12 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
       setSettings(result)
       setFormState(result ? toFormState(result) : createEmptyFormState())
       onSettingsChange(result)
+      if (result) {
+        setLanguage(result.language)
+      }
       await refreshStoredLogo(result)
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Could not load system settings.')
+      setLoadError(error instanceof Error ? error.message : t('settings.couldNotLoadDetail'))
     } finally {
       setIsLoading(false)
     }
@@ -151,7 +177,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
     try {
       replaceStoredLogoUrl(await fetchSystemLogoUrl())
     } catch {
-      setLogoError('Could not load the stored logo.')
+      setLogoError(t('settings.couldNotLoadLogo'))
     }
   }
 
@@ -191,7 +217,11 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
 
     if (validationError) {
       clearPendingLogo()
-      setLogoError(validationError)
+      setLogoError(
+        validationError === 'unsupportedType'
+          ? t('settings.logoUnsupportedType')
+          : t('settings.logoTooLarge'),
+      )
       return
     }
 
@@ -229,7 +259,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
         return next
       })
     } catch (error) {
-      setLogoError(error instanceof Error ? error.message : 'Could not remove the logo.')
+      setLogoError(error instanceof Error ? error.message : t('settings.couldNotRemoveLogo'))
     } finally {
       setIsRemovingLogo(false)
     }
@@ -248,10 +278,11 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
       const created = await persistPendingLogo(await createSystemSettings(formState))
       setSettings(created)
       setFormState(toFormState(created))
+      setLanguage(created.language)
       onSettingsChange(created)
       await refreshStoredLogo(created)
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Could not save system settings.')
+      setSaveError(error instanceof Error ? error.message : t('settings.couldNotSaveDetail'))
     } finally {
       setIsSaving(false)
     }
@@ -266,11 +297,12 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
       const updated = await persistPendingLogo(await updateSystemSettings(formState))
       setSettings(updated)
       setFormState(toFormState(updated))
+      setLanguage(updated.language)
       onSettingsChange(updated)
       await refreshStoredLogo(updated)
       setIsEditModalOpen(false)
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Could not update system settings.')
+      setSaveError(error instanceof Error ? error.message : t('settings.couldNotUpdateDetail'))
     } finally {
       setIsSaving(false)
     }
@@ -290,7 +322,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
     const previewUrl = pendingLogoUrl ?? storedLogoUrl
 
     return (
-      <FormGroup label="Logo" fieldId="settings-logo">
+      <FormGroup label={t('settings.logo')} fieldId="settings-logo">
         <input
           id="settings-logo"
           ref={logoInputRef}
@@ -301,20 +333,22 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
         <FormHelperText>
           <HelperText>
             <HelperTextItem variant={logoError ? 'error' : 'default'}>
-              {logoError ?? 'PNG, JPEG, WEBP or SVG up to 2 MB. The image is uploaded when the settings are saved.'}
+              {logoError ?? t('settings.logoHelp')}
             </HelperTextItem>
           </HelperText>
         </FormHelperText>
         {previewUrl ? (
           <div className="settings-logo-preview">
-            <img src={previewUrl} alt="System logo preview" className="settings-logo-preview-image" />
+            <img src={previewUrl} alt={t('settings.logoPreviewAlt')} className="settings-logo-preview-image" />
             <div className="settings-logo-preview-actions">
               <span className="settings-logo-preview-caption">
-                {pendingLogoUrl ? `Preview: ${pendingLogoFile?.name ?? 'selected image'} (not saved yet)` : 'Current logo'}
+                {pendingLogoUrl
+                  ? t('settings.logoPreviewPending', { name: pendingLogoFile?.name ?? '' })
+                  : t('settings.logoCurrent')}
               </span>
               {pendingLogoUrl ? (
                 <Button variant="link" isInline onClick={clearPendingLogo} isDisabled={isSaving}>
-                  Discard selection
+                  {t('settings.logoDiscard')}
                 </Button>
               ) : (
                 <Button
@@ -325,7 +359,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
                   isLoading={isRemovingLogo}
                   isDisabled={isRemovingLogo || isSaving}
                 >
-                  Remove logo
+                  {t('settings.logoRemove')}
                 </Button>
               )}
             </div>
@@ -338,18 +372,18 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
   function renderFormFields() {
     return (
       <>
-        <FormGroup label="Language" isRequired fieldId="settings-language">
+        <FormGroup label={t('settings.language')} isRequired fieldId="settings-language">
           <FormSelect
             id="settings-language"
             value={formState.language}
             onChange={(_event, value) => updateFormField('language', value as Language)}
           >
-            {LANGUAGE_OPTIONS.map((option) => (
-              <FormSelectOption key={option.value} value={option.value} label={option.label} />
+            {LANGUAGE_OPTION_KEYS.map((option) => (
+              <FormSelectOption key={option.value} value={option.value} label={t(option.labelKey)} />
             ))}
           </FormSelect>
         </FormGroup>
-        <FormGroup label="Cursor API key" fieldId="settings-cursor-api-key">
+        <FormGroup label={t('settings.cursorApiKey')} fieldId="settings-cursor-api-key">
           <TextInput
             id="settings-cursor-api-key"
             type="password"
@@ -357,14 +391,14 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
             onChange={(_event, value) => updateFormField('cursorApiKey', value)}
           />
         </FormGroup>
-        <FormGroup label="Cursor model" fieldId="settings-cursor-model">
+        <FormGroup label={t('settings.cursorModel')} fieldId="settings-cursor-model">
           <TextInput
             id="settings-cursor-model"
             value={formState.cursorModel}
             onChange={(_event, value) => updateFormField('cursorModel', value)}
           />
         </FormGroup>
-        <FormGroup label="LLM API key" fieldId="settings-llm-api-key">
+        <FormGroup label={t('settings.llmApiKey')} fieldId="settings-llm-api-key">
           <TextInput
             id="settings-llm-api-key"
             type="password"
@@ -372,32 +406,32 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
             onChange={(_event, value) => updateFormField('llmApiKey', value)}
           />
         </FormGroup>
-        <FormGroup label="LLM model" fieldId="settings-llm-model">
+        <FormGroup label={t('settings.llmModel')} fieldId="settings-llm-model">
           <TextInput
             id="settings-llm-model"
             value={formState.llmModel}
             onChange={(_event, value) => updateFormField('llmModel', value)}
           />
         </FormGroup>
-        <FormGroup label="Default extraction method" isRequired fieldId="settings-extraction-method">
+        <FormGroup label={t('settings.defaultExtractionMethod')} isRequired fieldId="settings-extraction-method">
           <FormSelect
             id="settings-extraction-method"
             value={formState.defaultExtractionMethod}
             onChange={(_event, value) => updateFormField('defaultExtractionMethod', value as ExtractionMethod)}
           >
-            {EXTRACTION_METHOD_OPTIONS.map((option) => (
-              <FormSelectOption key={option.value} value={option.value} label={option.label} />
+            {EXTRACTION_METHOD_OPTION_KEYS.map((option) => (
+              <FormSelectOption key={option.value} value={option.value} label={t(option.labelKey)} />
             ))}
           </FormSelect>
         </FormGroup>
-        <FormGroup label="Status" isRequired fieldId="settings-status">
+        <FormGroup label={t('settings.status')} isRequired fieldId="settings-status">
           <FormSelect
             id="settings-status"
             value={formState.status}
             onChange={(_event, value) => updateFormField('status', value as SettingsStatus)}
           >
-            {STATUS_OPTIONS.map((option) => (
-              <FormSelectOption key={option.value} value={option.value} label={option.label} />
+            {STATUS_OPTION_KEYS.map((option) => (
+              <FormSelectOption key={option.value} value={option.value} label={t(option.labelKey)} />
             ))}
           </FormSelect>
         </FormGroup>
@@ -409,7 +443,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
   if (isLoading) {
     return (
       <PageSection>
-        <Spinner size="lg" aria-label="Loading system settings" />
+        <Spinner size="lg" aria-label={t('settings.loading')} />
       </PageSection>
     )
   }
@@ -417,21 +451,21 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
   return (
     <PageSection>
       {loadError ? (
-        <Alert isInline variant="danger" title="Could not load system settings">
+        <Alert isInline variant="danger" title={t('settings.couldNotLoad')}>
           {loadError}
         </Alert>
       ) : null}
       {!settings ? (
         <Card className="pf-v5-c-card">
           <CardHeader>
-            <Title headingLevel="h2" size="xl"><span className="section-title"><CogIcon className="section-title-icon" />System settings</span></Title>
+            <Title headingLevel="h2" size="xl"><span className="section-title"><CogIcon className="section-title-icon" />{t('settings.systemSettings')}</span></Title>
           </CardHeader>
           <CardBody>
-            <Alert isInline variant="info" title="Initial configuration required">
-              No system settings were found. Configure the system before using the other sections.
+            <Alert isInline variant="info" title={t('settings.initialRequired')}>
+              {t('settings.initialRequiredBody')}
             </Alert>
             {saveError ? (
-              <Alert isInline variant="danger" title="Could not save system settings">
+              <Alert isInline variant="danger" title={t('settings.couldNotSave')}>
                 {saveError}
               </Alert>
             ) : null}
@@ -439,7 +473,7 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
               {renderFormFields()}
               <div className="form-actions-right">
                 <Button type="submit" variant="primary" isLoading={isSaving} isDisabled={isSaving}>
-                  Save settings
+                  {t('settings.saveSettings')}
                 </Button>
               </div>
             </Form>
@@ -449,46 +483,46 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
         <Card className="pf-v5-c-card">
           <CardHeader>
             <div className="reports-page-heading">
-              <Title headingLevel="h2" size="xl"><span className="section-title"><CogIcon className="section-title-icon" />System settings</span></Title>
+              <Title headingLevel="h2" size="xl"><span className="section-title"><CogIcon className="section-title-icon" />{t('settings.systemSettings')}</span></Title>
               <Button type="button" variant="secondary" onClick={openEditModal}>
-                Edit settings
+                {t('settings.editSettings')}
               </Button>
             </div>
           </CardHeader>
           <CardBody>
             <DescriptionList isHorizontal>
               <DescriptionListGroup>
-                <DescriptionListTerm>Language</DescriptionListTerm>
-                <DescriptionListDescription>{settings.language}</DescriptionListDescription>
+                <DescriptionListTerm>{t('settings.language')}</DescriptionListTerm>
+                <DescriptionListDescription>{t(languageLabelKey(settings.language))}</DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>Cursor model</DescriptionListTerm>
+                <DescriptionListTerm>{t('settings.cursorModel')}</DescriptionListTerm>
                 <DescriptionListDescription>{settings.cursorModel}</DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>LLM model</DescriptionListTerm>
+                <DescriptionListTerm>{t('settings.llmModel')}</DescriptionListTerm>
                 <DescriptionListDescription>{settings.llmModel}</DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>Default extraction method</DescriptionListTerm>
-                <DescriptionListDescription>{settings.defaultExtractionMethod}</DescriptionListDescription>
+                <DescriptionListTerm>{t('settings.defaultExtractionMethod')}</DescriptionListTerm>
+                <DescriptionListDescription>{t(extractionLabelKey(settings.defaultExtractionMethod))}</DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>Status</DescriptionListTerm>
-                <DescriptionListDescription>{settings.status}</DescriptionListDescription>
+                <DescriptionListTerm>{t('settings.status')}</DescriptionListTerm>
+                <DescriptionListDescription>{t(statusLabelKey(settings.status))}</DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>Logo</DescriptionListTerm>
+                <DescriptionListTerm>{t('settings.logo')}</DescriptionListTerm>
                 <DescriptionListDescription>
                   {storedLogoUrl ? (
-                    <img src={storedLogoUrl} alt="System logo" className="settings-logo-preview-image" />
+                    <img src={storedLogoUrl} alt={t('settings.logoAlt')} className="settings-logo-preview-image" />
                   ) : (
-                    'No logo uploaded'
+                    t('settings.logoNone')
                   )}
                 </DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
-                <DescriptionListTerm>Created at</DescriptionListTerm>
+                <DescriptionListTerm>{t('settings.createdAt')}</DescriptionListTerm>
                 <DescriptionListDescription>{settings.createdAt}</DescriptionListDescription>
               </DescriptionListGroup>
             </DescriptionList>
@@ -500,10 +534,10 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
       >
-        <ModalHeader title="Edit system settings" labelId="edit-settings-modal-title" />
+        <ModalHeader title={t('settings.editModalTitle')} labelId="edit-settings-modal-title" />
         <ModalBody id="edit-settings-modal-description">
           {saveError ? (
-            <Alert isInline variant="danger" title="Could not update system settings">
+            <Alert isInline variant="danger" title={t('settings.couldNotUpdate')}>
               {saveError}
             </Alert>
           ) : null}
@@ -519,10 +553,10 @@ function ConfigurationsPage({ onSettingsChange }: ConfigurationsPageProps) {
             isLoading={isSaving}
             isDisabled={isSaving}
           >
-            Save changes
+            {t('settings.saveChanges')}
           </Button>
           <Button variant="link" onClick={() => setIsEditModalOpen(false)} isDisabled={isSaving}>
-            Cancel
+            {t('common.cancel')}
           </Button>
         </ModalFooter>
       </Modal>
