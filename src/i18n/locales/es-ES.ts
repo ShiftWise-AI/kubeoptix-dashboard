@@ -17,6 +17,11 @@ const esES: TranslationDictionary = {
   'common.email': 'Correo electrónico',
   'common.unknownRequestError': 'Error de solicitud desconocido',
   'common.confirmActionTitle': '¿Desea realizar esta acción?',
+  'auth.sessionExpired': 'Su sesión expiró. Inicie sesión nuevamente para continuar.',
+  'auth.logout': 'Cerrar sesión',
+  'auth.logoutFailed': 'No se pudo cerrar la sesión.',
+  'auth.loading': 'Comprobando autenticación...',
+  'auth.unauthenticated': 'Autenticación requerida.',
 
   'nav.serviceSections': 'Secciones del servicio',
   'nav.harvester': 'Harvester',

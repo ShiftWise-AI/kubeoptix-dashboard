@@ -32,12 +32,12 @@ RUN dnf -y update && \
 
 COPY --from=build /opt/app-root/src/dist ./dist
 COPY server.mjs ./server.mjs
+COPY server ./server
 
 EXPOSE 8080
 
 USER kubeoptix
 
 CMD ["node", "server.mjs"]
-
 
 

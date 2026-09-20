@@ -22,7 +22,8 @@ spec:
         image.openshift.io/triggers: >-
           [{"from":{"kind":"ImageStreamTag","name":"kubeoptix-dashboard:latest","namespace":"shiftwise-ai"},"fieldPath":"spec.template.spec.containers[?(@.name==\"dashboard\")].image"}]
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: kubeoptix-dashboard
+      automountServiceAccountToken: true
       terminationGracePeriodSeconds: 30
       containers:
         - name: dashboard
@@ -31,6 +32,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: kubeoptix-dashboard-env
+          env:
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoptix-dashboard-oauth-cookie
+                  key: session-secret
           ports:
             - name: http
               containerPort: 8080
@@ -64,6 +71,49 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+        - name: oauth-proxy
+          image: {{ .Values.oauthProxy.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --provider=openshift
+            - --openshift-service-account=kubeoptix-dashboard
+            - --upstream=http://127.0.0.1:8080
+            - --http-address=0.0.0.0:4180
+            - --https-address=
+            - --proxy-prefix=/oauth2
+            - --skip-provider-button=true
+            - --pass-user-headers=true
+            - --pass-access-token=false
+            - --cookie-secret=$(OAUTH2_PROXY_COOKIE_SECRET)
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            {{- if .Values.oauthProxy.routeHost }}
+            - --redirect-url=https://{{ .Values.oauthProxy.routeHost }}/oauth2/callback
+            {{- end }}
+          env:
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: kubeoptix-dashboard-oauth-cookie
+                  key: cookie-secret
+          ports:
+            - name: oauth-http
+              containerPort: 4180
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /oauth2/healthz
+              port: oauth-http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault

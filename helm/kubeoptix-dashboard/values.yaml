@@ -1,2 +1,5 @@
 buildOnly: false
 environmentFile: ""
+oauthProxy:
+  image: quay.io/openshift/origin-oauth-proxy:4.18
+  routeHost: ""

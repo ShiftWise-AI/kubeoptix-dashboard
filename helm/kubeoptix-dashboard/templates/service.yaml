@@ -14,5 +14,5 @@ spec:
     - name: http
       port: 8080
       protocol: TCP
-      targetPort: http
+      targetPort: oauth-http
     {{- end }}

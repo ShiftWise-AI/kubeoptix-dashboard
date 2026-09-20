@@ -1,0 +1,41 @@
+{{- if not .Values.buildOnly }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeoptix-dashboard
+  namespace: shiftwise-ai
+  annotations:
+    serviceaccounts.openshift.io/oauth-redirectreference.primary: >-
+      {"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"kubeoptix-dashboard"}}
+  labels:
+    app.kubernetes.io/name: kubeoptix-dashboard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeoptix-dashboard-auth-delegator
+  namespace: shiftwise-ai
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: kubeoptix-dashboard
+    namespace: shiftwise-ai
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubeoptix-dashboard-oauth-cookie
+  namespace: shiftwise-ai
+  labels:
+    app.kubernetes.io/name: kubeoptix-dashboard
+type: Opaque
+stringData:
+  {{- $existing := lookup "v1" "Secret" "shiftwise-ai" "kubeoptix-dashboard-oauth-cookie" }}
+  {{- $cookieSecret := get (default dict $existing.data) "cookie-secret" }}
+  {{- $sessionSecret := get (default dict $existing.data) "session-secret" }}
+  cookie-secret: {{ if $cookieSecret }}{{ $cookieSecret | b64dec | quote }}{{ else }}{{ randAlphaNum 32 | quote }}{{ end }}
+  session-secret: {{ if $sessionSecret }}{{ $sessionSecret | b64dec | quote }}{{ else }}{{ randAlphaNum 64 | quote }}{{ end }}
+{{- end }}

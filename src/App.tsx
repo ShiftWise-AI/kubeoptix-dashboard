@@ -34,7 +34,7 @@ import {
   Title,
 } from '@patternfly/react-core'
 import type { TreeViewDataItem } from '@patternfly/react-core'
-import { ChartLineIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon } from '@patternfly/react-icons'
+import { ChartLineIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon, UserIcon } from '@patternfly/react-icons'
 import ConfigurationsPage from './ConfigurationsPage'
 import DocumentDependenciesPage from './DocumentDependenciesPage'
 import type { DocumentReport } from './DocumentDependenciesPage'
@@ -51,6 +51,7 @@ import {
 } from './config/api'
 import { ApiRequestError, executeRequest } from './services/httpClient'
 import { runAnalysis, type AnalysisMode } from './services/analysisService'
+import { fetchAuthSession, logout, type AuthSession } from './services/authService'
 
 type MenuKey = 'harvester' | 'analyzer' | 'reports' | 'configurations'
 type ColorScheme = 'system' | 'dark'
@@ -350,6 +351,8 @@ function App() {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
     return savedValue === 'dark' ? 'dark' : 'system'
   })
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null)
+  const [authError, setAuthError] = useState(false)
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => (
     window.matchMedia('(prefers-color-scheme: dark)').matches
   ))
@@ -411,6 +414,63 @@ function App() {
   useAutoDismissMessage(predictiveStatusError, () => setPredictiveStatusError(null))
   useAutoDismissMessage(collectionCompletionMessage, () => setCollectionCompletionMessage(null))
   useAutoDismissMessage(analyzerCompletionMessage, () => setAnalyzerCompletionMessage(null))
+
+  useEffect(() => {
+    if (__DEVELOPMENT_MODE__) {
+      setAuthSession({ authenticated: true, username: 'development' })
+      return
+    }
+
+    let active = true
+    const loadSession = async () => {
+      try {
+        const session = await fetchAuthSession()
+        if (!active) return
+        setAuthSession(session)
+        if (!session.authenticated) {
+          setAuthError(true)
+        } else {
+          window.sessionStorage.removeItem('kubeoptix-auth-redirected')
+        }
+      } catch {
+        if (active) setAuthError(true)
+      }
+    }
+
+    void loadSession()
+    const intervalId = window.setInterval(() => void loadSession(), 60_000)
+    const handleExpired = () => {
+      setAuthSession({ authenticated: false })
+      setAuthError(true)
+    }
+    window.addEventListener('kubeoptix-auth-expired', handleExpired)
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+      window.removeEventListener('kubeoptix-auth-expired', handleExpired)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!authError || __DEVELOPMENT_MODE__) return
+    const alreadyRedirected = window.sessionStorage.getItem('kubeoptix-auth-redirected')
+    if (alreadyRedirected) return
+    window.sessionStorage.setItem('kubeoptix-auth-redirected', 'true')
+    const timeoutId = window.setTimeout(() => {
+      window.location.assign('/oauth2/start?rd=/')
+    }, 1500)
+    return () => window.clearTimeout(timeoutId)
+  }, [authError])
+
+  async function handleLogout() {
+    try {
+      await logout()
+    } catch {
+      setAuthError(true)
+      return
+    }
+    window.location.assign('/oauth2/sign_out')
+  }
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -1082,6 +1142,17 @@ function App() {
               {t('app.description')}
             </span>
             <div className="masthead-tools">
+              {authSession?.authenticated ? (
+                <Button
+                  variant="plain"
+                  icon={<UserIcon />}
+                  onClick={() => void handleLogout()}
+                  aria-label={t('auth.logout')}
+                >
+                  {authSession.username}
+                  <span className="auth-logout-label">{t('auth.logout')}</span>
+                </Button>
+              ) : null}
               <Switch
                 id="color-scheme-switch"
                 label={colorScheme === 'dark' ? t('theme.dark') : t('theme.system')}
@@ -1096,6 +1167,11 @@ function App() {
       sidebar={sidebar}
       isManagedSidebar
     >
+      {authError ? (
+        <PageSection>
+          <Alert isInline variant="warning" title={t('auth.sessionExpired')} />
+        </PageSection>
+      ) : null}
       {isSystemConfigured === false ? (
         <PageSection>
           <Alert isInline variant="info" title={t('settings.initialRequired')}>
