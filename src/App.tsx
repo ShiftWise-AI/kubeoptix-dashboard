@@ -260,6 +260,9 @@ async function fetchReportContent(fileName: string): Promise<string> {
   const text = await response.text()
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('kubeoptix-auth-expired'))
+    }
     let message = `Request failed with status ${response.status}`
 
     try {
@@ -297,6 +300,9 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
   })
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('kubeoptix-auth-expired'))
+    }
     const responseText = await response.text()
     let message = responseText || `Request failed with status ${response.status}`
 
@@ -322,6 +328,9 @@ async function deleteReportContent(fileName: string): Promise<void> {
 
   // Treat "already gone" as success so repeated/idempotent deletes don't surface an error.
   if (!response.ok && response.status !== 404) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('kubeoptix-auth-expired'))
+    }
     const responseText = await response.text()
     let message = responseText || `Request failed with status ${response.status}`
 

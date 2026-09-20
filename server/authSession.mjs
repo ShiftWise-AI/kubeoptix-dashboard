@@ -14,7 +14,13 @@ function parseCookies(header) {
   return Object.fromEntries((header ?? '').split(';').flatMap((part) => {
     const separator = part.indexOf('=')
     if (separator < 0) return []
-    return [[part.slice(0, separator).trim(), decodeURIComponent(part.slice(separator + 1).trim())]]
+    const name = part.slice(0, separator).trim()
+    const encodedValue = part.slice(separator + 1).trim()
+    try {
+      return [[name, decodeURIComponent(encodedValue)]]
+    } catch {
+      return []
+    }
   }))
 }
 

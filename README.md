@@ -1,46 +1,46 @@
 # KubeOptix Dashboard
 
-Dashboard web em React + TypeScript para operar o fluxo de avaliação do ShiftWise AI / KubeOptix. A interface coordena coleta de dados, análise, edição de relatórios, versionamento de documentos e configuração do sistema com PatternFly.
+React + TypeScript web dashboard for operating the ShiftWise AI / KubeOptix assessment workflow. The interface coordinates data collection, analysis, report editing, document versioning, and system configuration with PatternFly.
 
-## Visão geral do fluxo
+## Workflow overview
 
-O fluxo principal foi desenhado para ser sequencial:
+The main workflow is sequential:
 
-1. Configurações: cria o registro único de configurações do sistema, define idioma e método de extração padrão, configura campos de modelo e chave de API e, opcionalmente, faz upload de logotipo em PNG, JPEG, WEBP ou SVG (máximo 2 MB). O restante do fluxo operacional fica indisponível até que esse registro exista.
-2. Harvester: seleciona namespaces, inicia a coleta da avaliação, acompanha o progresso, inspeciona a árvore coletada e remove dados quando necessário.
-3. Analyzer: seleciona namespaces e executa análise generativa (LLM) ou preditiva (machine learning). Jobs longos são consultados até a conclusão.
-4. Reports: revisa relatórios em Markdown gerados, edita o conteúdo, visualiza ou baixa o Markdown e salva versões do documento com metadados.
+1. Configuration: creates the single system configuration record, sets the language and default extraction method, configures model and API-key fields, and optionally uploads a PNG, JPEG, WEBP, or SVG logo (maximum 2 MB). The rest of the operational workflow remains unavailable until this record exists.
+2. Harvester: selects namespaces, starts assessment collection, monitors progress, inspects the collected tree, and removes data when needed.
+3. Analyzer: selects namespaces and runs generative (LLM) or predictive (machine learning) analysis. Long-running jobs are polled until completion.
+4. Reports: reviews generated Markdown reports, edits content, views or downloads Markdown, and saves document versions with metadata.
 
-A tela de relatórios também gerencia listas de autores e clientes. Um documento pode ter vários autores e clientes; o cliente representa cada combinação autor/cliente como um registro de documento, mantendo um único relatório visível na lista. Relatórios salvos são marcados pela versão, enquanto rascunhos permanecem não salvos.
+The reports screen also manages author and customer lists. A document can have multiple authors and customers; each author/customer combination is represented as a document record while a single report remains visible in the list. Saved reports are marked with their version, while drafts remain unsaved.
 
-Ao salvar um documento, o dashboard grava o Markdown editado no serviço de reporter, cria os registros de documento/versão no serviço de configuração e remove o arquivo bruto do repositório de relatórios da IA. O documento salvo continua visível no banco de configuração. Ele também pode ser exportado em PDF; o dashboard rehidrata o arquivo antes de solicitar o endpoint de PDF do reporter quando a origem não está mais disponível em disco.
+When a document is saved, the dashboard writes the edited Markdown to the reporter service, creates document/version records in the configuration service, and removes the raw file from the AI report repository. The saved document remains visible in the configuration database. It can also be exported as PDF; the dashboard rehydrates the file before requesting the reporter PDF endpoint when the source is no longer available on disk.
 
-## Serviços de backend e rotas do proxy
+## Backend services and proxy routes
 
-O navegador chama apenas as rotas locais do dashboard. Em desenvolvimento, o Vite faz o proxy dessas requisições. Em produção, `server.mjs` executa o mesmo proxy em tempo de execução:
+The browser calls only the dashboard's local routes. During development, Vite proxies these requests. In production, `server.mjs` runs the same proxy at runtime:
 
-| Rota do dashboard | Responsabilidade upstream |
+| Dashboard route | Upstream responsibility |
 | --- | --- |
-| `/api/harvester/*` e caminhos de coleta | Descoberta de namespaces, coleta, status e dados da avaliação |
-| `/api/analyzer/*` | Análise generativa, status, namespaces e listagem de relatórios do analyzer |
-| `/api/reporter/*` | Leitura/escrita de Markdown e renderização em PDF |
-| `/api/core-ai/*` | Análise preditiva e operações da core AI |
-| `/api/reports/*` | Status de relatórios da core AI e exclusão de arquivos |
-| `/api/settings/*` | Configurações do sistema, logotipo, autores, clientes, documentos e versões |
+| `/api/harvester/*` and collection paths | Namespace discovery, collection, status, and assessment data |
+| `/api/analyzer/*` | Generative analysis, status, namespaces, and analyzer report listing |
+| `/api/reporter/*` | Markdown read/write and PDF rendering |
+| `/api/core-ai/*` | Predictive analysis and core AI operations |
+| `/api/reports/*` | Core AI report status and file deletion |
+| `/api/settings/*` | System settings, logo, authors, customers, documents, and versions |
 
-O proxy mantém as URLs dos serviços upstream fora do navegador e fornece um único ponto de entrada para o frontend.
+The proxy keeps upstream service URLs out of the browser and provides a single entry point for the frontend.
 
-## Stack tecnológica
+## Technology stack
 
 - React 19
-- TypeScript em modo estrito
+- TypeScript in strict mode
 - Vite 8
 - PatternFly 6.6.1
-- Vitest para testes unitários
-- Servidor Node.js para produção e proxy de APIs
-- Suporte a implantação com Podman, Helm e OpenShift
+- Vitest for unit tests
+- Node.js server for production and API proxying
+- Deployment support with Podman, Helm, and OpenShift
 
-## Estrutura do projeto
+## Project structure
 
 ```text
 .
@@ -64,47 +64,47 @@ O proxy mantém as URLs dos serviços upstream fora do navegador e fornece um ú
 └── ...
 ```
 
-## Pré-requisitos
+## Prerequisites
 
-- Node.js 20+ (ou versão compatível com o projeto)
+- Node.js 20+ (or a version compatible with the project)
 - npm
-- Podman para builds de container
-- Helm e oc para implantação em OpenShift
+- Podman for container builds
+- Helm and oc for OpenShift deployment
 
-## Desenvolvimento local
+## Local development
 
-Instale as dependências:
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-Inicie o servidor de desenvolvimento:
+Start the development server:
 
 ```bash
 npm run dev
 ```
 
-O Vite carrega automaticamente `.env.development`. Abra a URL exibida pelo Vite, normalmente `http://localhost:5173`.
+Vite automatically loads `.env.development`. Open the URL shown by Vite, usually `http://localhost:5173`.
 
-Comandos disponíveis:
+Available commands:
 
 ```bash
-npm run dev       # Inicia o Vite em modo de desenvolvimento
-npm run build     # Realiza type-check e gera o dist/
-npm run preview   # Visualiza a build de produção
-npm run start     # Serve dist/ via server.mjs na porta 8080
-npm run test      # Executa a suíte do Vitest
-npm run lint      # Executa o oxlint
+npm run dev       # Start Vite in development mode
+npm run build     # Run type-check and generate dist/
+npm run preview   # Preview the production build
+npm run start     # Serve dist/ through server.mjs on port 8080
+npm run test      # Run the Vitest suite
+npm run lint      # Run oxlint
 ```
 
-Em desenvolvimento, o navegador usa rotas locais do frontend e o Vite faz proxy para os serviços upstream sem expor suas URLs ao cliente.
+During development, the browser uses local frontend routes and Vite proxies upstream services without exposing their URLs to the client.
 
-## Configuração de ambiente
+## Environment configuration
 
-### Variáveis de desenvolvimento
+### Development variables
 
-Os valores esperados estão em `.env.development`:
+The expected values are in `.env.development`:
 
 ```env
 ENV=development
@@ -116,11 +116,11 @@ SETTINGS_API_URL=http://localhost:8000
 TZ=UTC-3
 ```
 
-`SETTINGS_API_URL` é opcional no arquivo de desenvolvimento porque o Vite usa `http://localhost:8000` por padrão, mas pode ser definido explicitamente quando o serviço de configuração estiver em outro host.
+`SETTINGS_API_URL` is optional in the development file because Vite defaults to `http://localhost:8000`, but it can be set explicitly when the configuration service runs on another host.
 
-### Variáveis do OpenShift
+### OpenShift variables
 
-A imagem de produção é configurada por meio de `.env.openshift`:
+The production image is configured through `.env.openshift`:
 
 ```env
 ENV=openshift
@@ -132,71 +132,71 @@ SETTINGS_API_URL=http://configurations-api:8000
 TZ=America/Sao_Paulo
 ```
 
-Os serviços internos usam os nomes DNS curtos porque o dashboard e as APIs são
-implantados no mesmo namespace (`shiftwise-ai`). Antes de disponibilizar o
-dashboard, confirme que todos esses Services já existem no namespace.
+Internal services use short DNS names because the dashboard and APIs are deployed
+in the same namespace (`shiftwise-ai`). Before exposing the dashboard, confirm
+that all of these Services already exist in the namespace.
 
-No servidor de produção, `HARVESTER_API_URL` e `ANALYZER_API_URL` devem estar presentes porque `server.mjs` monta essas URLs na inicialização. As demais URLs upstream têm defaults amigáveis a contêineres, mas é recomendado definir as cinco explicitamente.
+In the production server, `HARVESTER_API_URL` and `ANALYZER_API_URL` must be present because `server.mjs` constructs these URLs at startup. The other upstream URLs have container-friendly defaults, but defining all five explicitly is recommended.
 
-## Execução em produção
+## Production execution
 
-O servidor de produção está em `server.mjs`, serve o frontend em `dist/`, faz proxy das APIs em tempo de execução e escuta em `0.0.0.0:8080`. Ele expõe `/healthz`, retornando `{ "status": "ok" }`, para readiness e liveness probes.
+The production server is implemented in `server.mjs`, serves the frontend from `dist/`, proxies APIs at runtime, and listens on `0.0.0.0:8080`. It exposes `/healthz`, returning `{ "status": "ok" }`, for readiness and liveness probes.
 
-Faça a build:
+Build the application:
 
 ```bash
 npm run build
 ```
 
-Execute a aplicação compilada com o servidor de produção:
+Run the compiled application with the production server:
 
 ```bash
 npm run start
 ```
 
-O servidor não carrega arquivos `.env` por si só. Informe os valores em runtime via shell, gerenciador de ambiente ou `ConfigMap` do container/OpenShift.
+The server does not load `.env` files by itself. Provide values at runtime through the shell, an environment manager, or an OpenShift/container `ConfigMap`.
 
-## Imagem de container
+## Container image
 
-Construa a imagem do container:
+Build the container image:
 
 ```bash
 podman build -t kubeoptix-dashboard -f Containerfile .
 ```
 
-Execute localmente com um arquivo de ambiente:
+Run it locally with an environment file:
 
 ```bash
 podman run --env-file .env -p 8080:8080 kubeoptix-dashboard
 ```
 
-A imagem é construída em duas etapas a partir do UBI 10, serve a aplicação como usuário não-root `kubeoptix`, expõe a porta `8080` e usa filesystem somente leitura na carga de trabalho do OpenShift.
+The image uses a two-stage UBI 10 build, runs the application as the non-root `kubeoptix` user, exposes port `8080`, and uses a read-only filesystem in the OpenShift workload.
 
-## Implantação no OpenShift
+## OpenShift deployment
 
-O projeto inclui um Helm chart em `helm/kubeoptix-dashboard` que cria:
+The project includes a Helm chart in `helm/kubeoptix-dashboard` that creates:
 
-- um `ImageStream` e um `BuildConfig` binário para o `Containerfile`;
-- um `ConfigMap` gerado a partir do arquivo de ambiente do OpenShift;
-- um `StatefulSet` de réplica única com probes em `/healthz`;
-- um `Service` e uma `Route` HTTPS com redirecionamento HTTP-to-HTTPS;
-- uma `ValidatingAdmissionPolicy` e binding que impedem redução para menos de uma réplica.
+- an `ImageStream` and binary `BuildConfig` for the `Containerfile`;
+- a `ConfigMap` generated from the OpenShift environment file;
+- a single-replica `StatefulSet` with probes on `/healthz`;
+- a `Service` and an HTTPS `Route` with HTTP-to-HTTPS redirection;
+- a `ValidatingAdmissionPolicy` and binding that prevent scaling below one replica.
 
-O chart exige `.Values.environmentFile`. O script `install.sh` fornece `.env.openshift` com `--set-file`, instala primeiro os recursos de build, inicia um build binário com `oc start-build` e depois instala os recursos da carga de trabalho. O cluster precisa permitir recursos de `BuildConfig`, `ImageStream`, `Route` e admission policy no namespace `shiftwise-ai`.
+The chart requires `.Values.environmentFile`. The `install.sh` script provides `.env.openshift` with `--set-file`, installs the build resources first, starts a binary build with `oc start-build`, and then installs the workload resources. The cluster must allow `BuildConfig`, `ImageStream`, `Route`, and admission policy resources in the `shiftwise-ai` namespace.
 
-### Autenticação OpenShift
+### OpenShift authentication
 
-O chart publica a aplicação atrás do `quay.io/openshift/origin-oauth-proxy`, usando o
-provider `openshift`. O proxy redireciona usuários não autenticados para o OAuth
-nativo do cluster e encaminha somente os headers de identidade para o dashboard.
-O dashboard não recebe nem armazena a senha ou o token do usuário.
-Como a Route termina TLS em modo `edge`, o proxy atende HTTP internamente na porta
-4180 e mantém seu listener HTTPS desabilitado.
-Se a versão do cluster não oferecer a tag padrão configurada no chart, ajuste
-`oauthProxy.image` para a imagem `origin-oauth-proxy` compatível com a versão do
-OpenShift antes do deploy.
+The chart publishes the application behind `quay.io/openshift/origin-oauth-proxy`,
+using the `openshift` provider. The proxy redirects unauthenticated users to the
+cluster's native OAuth flow and forwards only identity headers to the dashboard.
+The dashboard never receives or stores the user's password or token.
+Because the Route uses `edge` TLS termination, the proxy serves HTTP internally on
+port 4180 and keeps its HTTPS listener disabled.
+If the cluster version does not provide the default tag configured in the chart,
+set `oauthProxy.image` to an `origin-oauth-proxy` image compatible with the
+OpenShift version before deployment.
 
-Configure o host público da Route para que o callback OAuth seja validado:
+Configure the public Route host so that the OAuth callback can be validated:
 
 ```bash
 helm upgrade --install kubeoptix-dashboard helm/kubeoptix-dashboard \
@@ -204,29 +204,36 @@ helm upgrade --install kubeoptix-dashboard helm/kubeoptix-dashboard \
   --set oauthProxy.routeHost=kubeoptix-dashboard-shiftwise-ai.apps.example.com
 ```
 
-O `ServiceAccount` usado pelo proxy recebe apenas o `system:auth-delegator`
-necessário para validar a identidade no OAuth do OpenShift. O chart cria e preserva
-um segredo de cookie do proxy e um segredo separado para assinar a sessão opaca da
-aplicação. Não substitua esses valores por credenciais de usuário.
-O mesmo `ServiceAccount` registra a Route como `OAuthRedirectReference`, permitindo
-ao OAuth do OpenShift validar o callback `/oauth2/callback`.
+The `ServiceAccount` used by the proxy receives only the `system:auth-delegator`
+permission required to validate identity through OpenShift OAuth. The chart creates
+and preserves one proxy cookie secret and a separate secret for signing the
+application's opaque session. Do not replace these values with user credentials.
+The same `ServiceAccount` registers the Route as an `OAuthRedirectReference`,
+allowing OpenShift OAuth to validate the `/oauth2/callback` callback.
+Inside the pod, the dashboard listens only on `127.0.0.1`; the `oauth-proxy` is
+the only container exposed by the `Service`. This prevents direct access to the
+dashboard process from presenting forged identity headers.
 
-As rotas `GET /api/auth/session` e `POST /api/auth/logout` também são protegidas
-pelo OAuth Proxy, garantindo que o header de identidade seja validado e injetado
-antes de chegar ao backend. A primeira retorna apenas `authenticated`, `username`
-e, quando disponível, `displayName`; as APIs do backend retornam `401` quando o
-header de identidade do proxy ou a sessão vinculada não é válida. O frontend
-consulta a sessão periodicamente e redireciona para
-`/oauth2/start` quando a autenticação OpenShift expira. O logout local também
-redireciona para `/oauth2/sign_out`.
+The `GET /api/auth/session` and `POST /api/auth/logout` routes are also protected
+by the OAuth Proxy, ensuring that the identity header is validated and injected
+before reaching the backend. The session endpoint returns only `authenticated`,
+`username`, and, when available, `displayName`; backend APIs return `401` when the
+proxy identity header or linked session is invalid. The frontend checks the session
+periodically and redirects to `/oauth2/start` when OpenShift authentication
+expires. Local logout also redirects to `/oauth2/sign_out`.
 
-Instale o chart:
+The dashboard's opaque session is kept in memory, and the chart pins the
+StatefulSet to one replica. Restarts invalidate local sessions and require new
+proxy authentication; the persistent secret prevents accidental signing-secret
+changes between restarts.
+
+Install the chart:
 
 ```bash
 ./install.sh
 ```
 
-O script exige `helm` e `oc`, acesso ao cluster OpenShift alvo, permissão para criar recursos em `shiftwise-ai` e uma configuração funcional de registro interno/build. Para renderizar ou instalar manualmente, passe o arquivo de ambiente explicitamente:
+The script requires `helm` and `oc`, access to the target OpenShift cluster, permission to create resources in `shiftwise-ai`, and a working internal registry/build configuration. To render or install manually, pass the environment file explicitly:
 
 ```bash
 helm upgrade --install kubeoptix-dashboard helm/kubeoptix-dashboard \
@@ -236,23 +243,23 @@ helm upgrade --install kubeoptix-dashboard helm/kubeoptix-dashboard \
   --set buildOnly=false
 ```
 
-Acompanhe o build e o rollout:
+Monitor the build and rollout:
 
 ```bash
 oc logs -f bc/kubeoptix-dashboard -n shiftwise-ai
 oc rollout status statefulset/kubeoptix-dashboard -n shiftwise-ai
 ```
 
-Obtenha a URL da Route gerada:
+Get the generated Route URL:
 
 ```bash
 oc get route kubeoptix-dashboard -n shiftwise-ai \
   -o jsonpath='https://{.spec.host}{"\n"}'
 ```
 
-## Validação
+## Validation
 
-Execute os checks automatizados:
+Run the automated checks:
 
 ```bash
 npm run test
@@ -260,7 +267,7 @@ npm run build
 npm run lint
 ```
 
-Esses comandos validam o frontend, testes de integração de serviços, build e regras de lint antes do deploy. Para um rollout no OpenShift, também verifique readiness e a route gerada:
+These commands validate the frontend, service integration tests, build, and lint rules before deployment. For an OpenShift rollout, also verify readiness and the generated Route:
 
 ```bash
 oc rollout status statefulset/kubeoptix-dashboard -n shiftwise-ai

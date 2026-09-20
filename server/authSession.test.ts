@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   clearSession,
   clearSessionsForTests,
@@ -61,5 +61,24 @@ describe('OpenShift-bound application sessions', () => {
       'x-forwarded-user': 'alice',
       cookie: `kubeoptix_session=${cookie}`,
     }))).toBeNull()
+  })
+
+  it('invalidates the application session after its bounded lifetime', () => {
+    vi.useFakeTimers()
+    try {
+      const firstResponse = response()
+      establishSession(request({ 'x-forwarded-user': 'alice' }), firstResponse)
+      const cookie = firstResponse.headers.get('Set-Cookie')?.match(/kubeoptix_session=([^;]+)/)?.[1]
+      expect(cookie).toBeTruthy()
+
+      vi.advanceTimersByTime(8 * 60 * 60 * 1000 + 1)
+
+      expect(getSession(request({
+        'x-forwarded-user': 'alice',
+        cookie: `kubeoptix_session=${cookie}`,
+      }))).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
