@@ -184,6 +184,42 @@ O projeto inclui um Helm chart em `helm/kubeoptix-dashboard` que cria:
 
 O chart exige `.Values.environmentFile`. O script `install.sh` fornece `.env.openshift` com `--set-file`, instala primeiro os recursos de build, inicia um build binário com `oc start-build` e depois instala os recursos da carga de trabalho. O cluster precisa permitir recursos de `BuildConfig`, `ImageStream`, `Route` e admission policy no namespace `shiftwise-ai`.
 
+### Autenticação OpenShift
+
+O chart publica a aplicação atrás do `quay.io/openshift/origin-oauth-proxy`, usando o
+provider `openshift`. O proxy redireciona usuários não autenticados para o OAuth
+nativo do cluster e encaminha somente os headers de identidade para o dashboard.
+O dashboard não recebe nem armazena a senha ou o token do usuário.
+Como a Route termina TLS em modo `edge`, o proxy atende HTTP internamente na porta
+4180 e mantém seu listener HTTPS desabilitado.
+Se a versão do cluster não oferecer a tag padrão configurada no chart, ajuste
+`oauthProxy.image` para a imagem `origin-oauth-proxy` compatível com a versão do
+OpenShift antes do deploy.
+
+Configure o host público da Route para que o callback OAuth seja validado:
+
+```bash
+helm upgrade --install kubeoptix-dashboard helm/kubeoptix-dashboard \
+  --set-file environmentFile=.env.openshift \
+  --set oauthProxy.routeHost=kubeoptix-dashboard-shiftwise-ai.apps.example.com
+```
+
+O `ServiceAccount` usado pelo proxy recebe apenas o `system:auth-delegator`
+necessário para validar a identidade no OAuth do OpenShift. O chart cria e preserva
+um segredo de cookie do proxy e um segredo separado para assinar a sessão opaca da
+aplicação. Não substitua esses valores por credenciais de usuário.
+O mesmo `ServiceAccount` registra a Route como `OAuthRedirectReference`, permitindo
+ao OAuth do OpenShift validar o callback `/oauth2/callback`.
+
+As rotas `GET /api/auth/session` e `POST /api/auth/logout` também são protegidas
+pelo OAuth Proxy, garantindo que o header de identidade seja validado e injetado
+antes de chegar ao backend. A primeira retorna apenas `authenticated`, `username`
+e, quando disponível, `displayName`; as APIs do backend retornam `401` quando o
+header de identidade do proxy ou a sessão vinculada não é válida. O frontend
+consulta a sessão periodicamente e redireciona para
+`/oauth2/start` quando a autenticação OpenShift expira. O logout local também
+redireciona para `/oauth2/sign_out`.
+
 Instale o chart:
 
 ```bash

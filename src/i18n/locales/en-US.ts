@@ -17,6 +17,11 @@ const enUS: TranslationDictionary = {
   'common.email': 'Email',
   'common.unknownRequestError': 'Unknown request error',
   'common.confirmActionTitle': 'Do you want to perform this action?',
+  'auth.sessionExpired': 'Your session expired. Sign in again to continue.',
+  'auth.logout': 'Log out',
+  'auth.logoutFailed': 'Could not log out.',
+  'auth.loading': 'Checking authentication...',
+  'auth.unauthenticated': 'Authentication required.',
 
   'nav.serviceSections': 'Service sections',
   'nav.harvester': 'Harvester',

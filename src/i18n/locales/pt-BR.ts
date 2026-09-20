@@ -17,6 +17,11 @@ const ptBR: TranslationDictionary = {
   'common.email': 'E-mail',
   'common.unknownRequestError': 'Erro de requisição desconhecido',
   'common.confirmActionTitle': 'Deseja realizar esta ação?',
+  'auth.sessionExpired': 'Sua sessão expirou. Faça login novamente para continuar.',
+  'auth.logout': 'Sair',
+  'auth.logoutFailed': 'Não foi possível encerrar a sessão.',
+  'auth.loading': 'Verificando autenticação...',
+  'auth.unauthenticated': 'Autenticação necessária.',
 
   'nav.serviceSections': 'Seções do serviço',
   'nav.harvester': 'Harvester',

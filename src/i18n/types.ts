@@ -23,6 +23,11 @@ export type TranslationDictionary = {
   'common.email': string
   'common.unknownRequestError': string
   'common.confirmActionTitle': string
+  'auth.sessionExpired': string
+  'auth.logout': string
+  'auth.logoutFailed': string
+  'auth.loading': string
+  'auth.unauthenticated': string
 
   // Navigation / chrome
   'nav.serviceSections': string

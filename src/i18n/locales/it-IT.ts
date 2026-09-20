@@ -17,6 +17,11 @@ const itIT: TranslationDictionary = {
   'common.email': 'Email',
   'common.unknownRequestError': 'Errore di richiesta sconosciuto',
   'common.confirmActionTitle': 'Vuoi eseguire questa azione?',
+  'auth.sessionExpired': 'La sessione è scaduta. Accedi di nuovo per continuare.',
+  'auth.logout': 'Esci',
+  'auth.logoutFailed': 'Impossibile terminare la sessione.',
+  'auth.loading': 'Verifica autenticazione...',
+  'auth.unauthenticated': 'Autenticazione richiesta.',
 
   'nav.serviceSections': 'Sezioni del servizio',
   'nav.harvester': 'Harvester',

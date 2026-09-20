@@ -69,6 +69,9 @@ export async function executeRequest(
   }
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('kubeoptix-auth-expired'))
+    }
     throw new ApiRequestError(
       typeof payload === 'object' && payload !== null && 'error' in payload
         ? String((payload as Record<string, unknown>).error)

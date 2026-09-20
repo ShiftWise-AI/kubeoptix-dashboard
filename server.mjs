@@ -2,6 +2,11 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { extname, join, normalize, resolve } from 'node:path'
 import { Readable } from 'node:stream'
+import {
+  clearSession,
+  establishSession,
+  getSession,
+} from './server/authSession.mjs'
 
 const port = 8080
 const harvesterApiUrl = new URL(process.env.HARVESTER_API_URL)
@@ -31,6 +36,14 @@ const contentTypes = {
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify(payload))
+}
+
+function sendUnauthorized(response) {
+  sendJson(response, 401, { error: 'Authentication required.' })
+}
+
+function isAuthPath(pathname) {
+  return pathname === '/api/auth/session' || pathname === '/api/auth/logout'
 }
 
 async function proxyApi(request, response, prefix, apiUrl) {
@@ -88,6 +101,37 @@ function serveStatic(request, response) {
 }
 
 const server = createServer(async (request, response) => {
+  const requestUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
+
+  if (requestUrl.pathname === '/api/auth/session') {
+    const session = establishSession(request, response)
+    if (!session) {
+      clearSession(request, response)
+      sendJson(response, 200, { authenticated: false })
+      return
+    }
+    sendJson(response, 200, {
+      authenticated: true,
+      username: session.identity.username,
+      ...(session.identity.displayName ? { displayName: session.identity.displayName } : {}),
+    })
+    return
+  }
+
+  if (requestUrl.pathname === '/api/auth/logout' && request.method === 'POST') {
+    clearSession(request, response)
+    response.writeHead(204)
+    response.end()
+    return
+  }
+
+  if (requestUrl.pathname.startsWith('/api/') && !isAuthPath(requestUrl.pathname)) {
+    if (!getSession(request) && !establishSession(request, response)) {
+      sendUnauthorized(response)
+      return
+    }
+  }
+
   if (request.url?.startsWith('/api/harvester')) {
     await proxyApi(request, response, '/api/harvester', harvesterApiUrl)
     return
