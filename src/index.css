@@ -263,8 +263,10 @@ body {
   font-size: 0.85rem;
 }
 
-.collection-progress-message {
-  margin: 0.5rem 0 0;
+.collection-progress-status {
+  margin: 0.4rem 0 0;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: 0.85rem;
 }
 
 .collection-progress {

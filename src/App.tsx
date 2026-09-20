@@ -411,6 +411,7 @@ function App() {
   const [isCollectionInProgress, setIsCollectionInProgress] = useState(false)
   const [isCollectionStatusPolling, setIsCollectionStatusPolling] = useState(false)
   const [hasCollectionStarted, setHasCollectionStarted] = useState(false)
+  const [hasCollectionSucceeded, setHasCollectionSucceeded] = useState(false)
   const [collectionProgress, setCollectionProgress] = useState(0)
   const [collectionCompletionMessage, setCollectionCompletionMessage] = useState<TranslationKey | null>(null)
   const [collectionStatusError, setCollectionStatusError] = useState<string | null>(null)
@@ -429,7 +430,7 @@ function App() {
   const [, setRunResponse] = useState<ApiResponseState>(initialResponseState)
 
   const mastheadLogo = dashboardLogo
-  const collectionCompleted = hasCollectionStarted && !isCollectionInProgress && !collectResponse.error
+  const collectionCompleted = hasCollectionSucceeded && !isCollectionInProgress && !collectResponse.error
   const analysisCompleted = hasAnalyzerStarted
     && !isAnalyzerInProgress
     && !analyzerStatusError
@@ -442,7 +443,11 @@ function App() {
   useAutoDismissMessage(collectionStatusError, () => setCollectionStatusError(null))
   useAutoDismissMessage(analyzerStatusError, () => setAnalyzerStatusError(null))
   useAutoDismissMessage(predictiveStatusError, () => setPredictiveStatusError(null))
-  useAutoDismissMessage(collectionCompletionMessage, () => setCollectionCompletionMessage(null))
+  useAutoDismissMessage(collectionCompletionMessage, () => {
+    setCollectionCompletionMessage(null)
+    setHasCollectionStarted(false)
+    setCollectionProgress(0)
+  })
   useAutoDismissMessage(analyzerCompletionMessage, () => setAnalyzerCompletionMessage(null))
 
   useEffect(() => {
@@ -699,6 +704,7 @@ function App() {
         if (progress >= 100) {
           setIsCollectionStatusPolling(false)
           setIsCollectionInProgress(false)
+          setHasCollectionSucceeded(true)
           setCollectResponse((previousState) => ({ ...previousState, pending: false }))
           setCollectionCompletionMessage('harvester.collectionCompletedContinue')
           void loadNamespaces()
@@ -961,6 +967,7 @@ function App() {
     setCollectionCompletionMessage(null)
     setIsCollectionStatusPolling(false)
     setHasCollectionStarted(true)
+    setHasCollectionSucceeded(false)
     setIsCollectionInProgress(true)
     setCollectResponse((previousState) => ({
       ...previousState,
@@ -1433,11 +1440,6 @@ function App() {
                       {t('workflow.collectHint')}
                     </Alert>
                   ) : null}
-                  {selectedNamespaces.length > 0 && !isCollectionInProgress ? (
-                    <Alert isInline variant="success" title={t('workflow.collectData')}>
-                      {t('common.selected')}: {selectedNamespaces.length} ({selectedNamespacesText})
-                    </Alert>
-                  ) : null}
                   <div className="collect-run-actions">
                     <Button
                       type="button"
@@ -1458,22 +1460,24 @@ function App() {
                   </div>
                   {hasCollectionStarted ? (
                     <div className="collection-progress" aria-live="polite">
-                      <Alert
-                        isInline
-                        variant={collectionStatusError ? 'warning' : isCollectionInProgress ? 'info' : 'success'}
-                        title={collectionStatusError
-                          ? t('harvester.statusRetry')
-                          : isCollectionInProgress
-                            ? t('harvester.collecting')
-                            : t('harvester.collectionCompleted')}
-                      >
-                        {collectionStatusError ?? (collectionCompletionMessage ? t(collectionCompletionMessage) : null)}
-                      </Alert>
                       <Progress
                         value={collectionProgress}
                         title={t('harvester.collectionProgress')}
                         measureLocation="inside"
                       />
+                      {!collectionStatusError ? (
+                        <p className="collection-progress-status">
+                          {isCollectionInProgress
+                            ? t('harvester.collecting')
+                            : collectionCompletionMessage
+                              ? t(collectionCompletionMessage)
+                              : t('harvester.collectionCompleted')}
+                        </p>
+                      ) : (
+                        <Alert isInline variant="warning" title={t('harvester.statusRetry')}>
+                          {collectionStatusError}
+                        </Alert>
+                      )}
                     </div>
                   ) : null}
                 </Form>
@@ -1652,11 +1656,6 @@ function App() {
                       {t('analyzer.runCollectionFirst')}
                     </Alert>
                   ) : null}
-                  {selectedAnalyzerNamespaces.length > 0 && !isAnalyzerInProgress ? (
-                    <Alert isInline variant="success" title={t('workflow.analyze')}>
-                      {t('common.selected')}: {selectedAnalyzerNamespaces.length} ({selectedAnalyzerNamespacesText})
-                    </Alert>
-                  ) : null}
                   <FormGroup label={t('analyzer.mode')} fieldId="run-mode">
                     <Flex direction={{ default: 'column' }}>
                       <FlexItem>
@@ -1690,24 +1689,28 @@ function App() {
                   </div>
                   {hasAnalyzerStarted ? (
                     <div className="collection-progress" aria-live="polite">
-                      <Alert
-                        isInline
-                        variant={predictiveStatusError || analyzerStatusError ? 'warning' : isAnalyzerInProgress ? 'info' : 'success'}
-                        title={predictiveStatusError
-                          ? t('analyzer.predictiveStatusRetry')
-                          : analyzerStatusError
-                            ? t('analyzer.statusRetry')
-                            : isAnalyzerInProgress
-                              ? t('analyzer.analyzing')
-                              : t('analyzer.analysisCompleted')}
-                      >
-                        {predictiveStatusError ?? analyzerStatusError ?? (analyzerCompletionMessage ? t(analyzerCompletionMessage) : null)}
-                      </Alert>
                       <Progress
                         value={analyzerProgress}
                         title={t('analyzer.progress')}
                         measureLocation="inside"
                       />
+                      {!predictiveStatusError && !analyzerStatusError ? (
+                        <p className="collection-progress-status">
+                          {isAnalyzerInProgress
+                            ? t('analyzer.analyzing')
+                            : analyzerCompletionMessage
+                              ? t(analyzerCompletionMessage)
+                              : t('analyzer.analysisCompleted')}
+                        </p>
+                      ) : (
+                        <Alert
+                          isInline
+                          variant="warning"
+                          title={predictiveStatusError ? t('analyzer.predictiveStatusRetry') : t('analyzer.statusRetry')}
+                        >
+                          {predictiveStatusError ?? analyzerStatusError}
+                        </Alert>
+                      )}
                     </div>
                   ) : null}
                 </Form>
