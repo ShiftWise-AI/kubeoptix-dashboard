@@ -49,8 +49,8 @@ type ConfigurationsPageProps = {
 }
 
 const LANGUAGE_OPTION_KEYS: { value: Language; labelKey: TranslationKey }[] = [
-  { value: 'pt', labelKey: 'settings.languagePt' },
-  { value: 'en', labelKey: 'settings.languageEn' },
+  { value: 'pt-br', labelKey: 'settings.languagePt' },
+  { value: 'en-us', labelKey: 'settings.languageEn' },
   { value: 'es', labelKey: 'settings.languageEs' },
   { value: 'it', labelKey: 'settings.languageIt' },
 ]
@@ -91,9 +91,9 @@ function toFormState(settings: SystemSettings): SystemSettingsInput {
 
 function languageLabelKey(language: Language): TranslationKey {
   switch (language) {
-    case 'pt':
+    case 'pt-br':
       return 'settings.languagePt'
-    case 'en':
+    case 'en-us':
       return 'settings.languageEn'
     case 'es':
       return 'settings.languageEs'

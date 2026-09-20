@@ -212,19 +212,19 @@ export type TranslationDictionary = {
 
 export type TranslationKey = keyof TranslationDictionary
 
-export const DEFAULT_LANGUAGE: Language = 'pt'
+export const DEFAULT_LANGUAGE: Language = 'pt-br'
 export const DEFAULT_LOCALE: LocaleCode = 'pt-BR'
 
 export const LANGUAGE_TO_LOCALE: Record<Language, LocaleCode> = {
-  pt: 'pt-BR',
-  en: 'en-US',
+  'pt-br': 'pt-BR',
+  'en-us': 'en-US',
   es: 'es',
   it: 'it',
 }
 
 export const LOCALE_TO_LANGUAGE: Record<LocaleCode, Language> = {
-  'pt-BR': 'pt',
-  'en-US': 'en',
+  'pt-BR': 'pt-br',
+  'en-US': 'en-us',
   es: 'es',
   it: 'it',
 }

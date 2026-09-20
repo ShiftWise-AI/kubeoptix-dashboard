@@ -20,7 +20,7 @@ const catalogs: Record<LocaleCode, TranslationDictionary> = {
   it,
 }
 
-const VALID_LANGUAGES = new Set<Language>(['en', 'pt', 'es', 'it'])
+const VALID_LANGUAGES = new Set<Language>(['en-us', 'pt-br', 'es', 'it'])
 
 export function isValidLanguage(value: unknown): value is Language {
   return typeof value === 'string' && VALID_LANGUAGES.has(value as Language)
