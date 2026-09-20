@@ -1,43 +1,9 @@
 import { SYSTEM_SETTINGS_LOGO_PATH, SYSTEM_SETTINGS_PATH, SYSTEM_SETTINGS_STATUS_PATH } from '../config/api'
 import { ApiRequestError, executeRequest } from './httpClient'
 
-export type Language = 'en-us' | 'pt-br' | 'es' | 'it'
+export type Language = 'pt-BR' | 'en-US' | 'es-ES' | 'it-IT'
 export type SettingsStatus = 'active' | 'inactive'
 export type ExtractionMethod = 'ml' | 'llm'
-
-// The API only accepts these codes (see Language.java). The UI uses the
-// locale-flavored codes above, so requests/responses are translated at the
-// service boundary to keep the two representations decoupled.
-type ApiLanguage = 'en' | 'pt' | 'es' | 'it'
-
-const LANGUAGE_TO_API_LANGUAGE: Record<Language, ApiLanguage> = {
-  'en-us': 'en',
-  'pt-br': 'pt',
-  es: 'es',
-  it: 'it',
-}
-
-const API_LANGUAGE_TO_LANGUAGE: Record<ApiLanguage, Language> = {
-  en: 'en-us',
-  pt: 'pt-br',
-  es: 'es',
-  it: 'it',
-}
-
-function toApiLanguage(language: Language): ApiLanguage {
-  return LANGUAGE_TO_API_LANGUAGE[language]
-}
-
-function fromApiLanguage(language: ApiLanguage): Language {
-  return API_LANGUAGE_TO_LANGUAGE[language] ?? language
-}
-
-type ApiSystemSettings = Omit<SystemSettings, 'language'> & { language: ApiLanguage }
-type ApiSystemSettingsInput = Partial<Omit<SystemSettingsInput, 'language'>> & { language?: ApiLanguage }
-
-function fromApiSettings(payload: ApiSystemSettings): SystemSettings {
-  return { ...payload, language: fromApiLanguage(payload.language) }
-}
 
 export type SystemSettings = {
   id: string
@@ -66,7 +32,7 @@ export type SystemSettingsInput = {
 export async function fetchSystemSettings(): Promise<SystemSettings | null> {
   try {
     const result = await executeRequest('GET', SYSTEM_SETTINGS_PATH)
-    return fromApiSettings(result.payload as ApiSystemSettings)
+    return result.payload as SystemSettings
   } catch (error) {
     if (error instanceof ApiRequestError && error.statusCode === 404) {
       return null
@@ -90,20 +56,14 @@ export async function fetchSystemSettingsExists(): Promise<boolean> {
 
 // Used when no record exists yet: creates the single system settings record.
 export async function createSystemSettings(input: SystemSettingsInput): Promise<SystemSettings> {
-  const apiInput: ApiSystemSettingsInput = { ...input, language: toApiLanguage(input.language) }
-  const result = await executeRequest('PUT', SYSTEM_SETTINGS_PATH, apiInput)
-  return fromApiSettings(result.payload as ApiSystemSettings)
+  const result = await executeRequest('PUT', SYSTEM_SETTINGS_PATH, input)
+  return result.payload as SystemSettings
 }
 
 // Used when a record already exists: partially updates the system settings record.
 export async function updateSystemSettings(input: Partial<SystemSettingsInput>): Promise<SystemSettings> {
-  const { language, ...rest } = input
-  const apiInput: ApiSystemSettingsInput = {
-    ...rest,
-    ...(language !== undefined ? { language: toApiLanguage(language) } : {}),
-  }
-  const result = await executeRequest('PATCH', SYSTEM_SETTINGS_PATH, apiInput)
-  return fromApiSettings(result.payload as ApiSystemSettings)
+  const result = await executeRequest('PATCH', SYSTEM_SETTINGS_PATH, input)
+  return result.payload as SystemSettings
 }
 
 export const LOGO_MAX_SIZE_BYTES = 2 * 1024 * 1024
@@ -144,7 +104,7 @@ export async function uploadSystemLogo(file: File): Promise<SystemSettings> {
     )
   }
 
-  return fromApiSettings(JSON.parse(text) as ApiSystemSettings)
+  return JSON.parse(text) as SystemSettings
 }
 
 export async function deleteSystemLogo(): Promise<void> {

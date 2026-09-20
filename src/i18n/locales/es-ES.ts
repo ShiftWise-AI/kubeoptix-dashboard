@@ -1,6 +1,6 @@
 import type { TranslationDictionary } from '../types'
 
-const es: TranslationDictionary = {
+const esES: TranslationDictionary = {
   'common.cancel': 'Cancelar',
   'common.close': 'Cerrar',
   'common.save': 'Guardar',
@@ -199,4 +199,4 @@ const es: TranslationDictionary = {
   'reports.deleteModalAfterPlain': ' del disco. Esta acción no se puede deshacer.',
 }
 
-export default es
+export default esES

@@ -1,7 +1,7 @@
 import type { Language } from '../services/settingsService'
 import enUS from './locales/en-US'
-import es from './locales/es'
-import it from './locales/it'
+import esES from './locales/es-ES'
+import itIT from './locales/it-IT'
 import ptBR from './locales/pt-BR'
 import {
   DEFAULT_LANGUAGE,
@@ -16,11 +16,11 @@ import {
 const catalogs: Record<LocaleCode, TranslationDictionary> = {
   'pt-BR': ptBR,
   'en-US': enUS,
-  es,
-  it,
+  'es-ES': esES,
+  'it-IT': itIT,
 }
 
-const VALID_LANGUAGES = new Set<Language>(['en-us', 'pt-br', 'es', 'it'])
+const VALID_LANGUAGES = new Set<Language>(['pt-BR', 'en-US', 'es-ES', 'it-IT'])
 
 export function isValidLanguage(value: unknown): value is Language {
   return typeof value === 'string' && VALID_LANGUAGES.has(value as Language)
