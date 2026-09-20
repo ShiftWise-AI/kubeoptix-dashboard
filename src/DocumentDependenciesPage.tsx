@@ -752,7 +752,6 @@ function DocumentDependenciesPage({
                     className="report-markdown-editor"
                     value={markdownContent}
                     resizeOrientation="vertical"
-                    autoResize
                     onChange={(_event, value) => setMarkdownContent(value)}
                   />
                 </FormGroup>
