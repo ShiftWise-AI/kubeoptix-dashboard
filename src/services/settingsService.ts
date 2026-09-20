@@ -1,7 +1,7 @@
 import { SYSTEM_SETTINGS_LOGO_PATH, SYSTEM_SETTINGS_PATH, SYSTEM_SETTINGS_STATUS_PATH } from '../config/api'
 import { ApiRequestError, executeRequest } from './httpClient'
 
-export type Language = 'en' | 'pt' | 'es' | 'it'
+export type Language = 'en-us' | 'pt-br' | 'es' | 'it'
 export type SettingsStatus = 'active' | 'inactive'
 export type ExtractionMethod = 'ml' | 'llm'
 
