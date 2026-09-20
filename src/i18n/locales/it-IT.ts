@@ -1,6 +1,6 @@
 import type { TranslationDictionary } from '../types'
 
-const it: TranslationDictionary = {
+const itIT: TranslationDictionary = {
   'common.cancel': 'Annulla',
   'common.close': 'Chiudi',
   'common.save': 'Salva',
@@ -199,4 +199,4 @@ const it: TranslationDictionary = {
   'reports.deleteModalAfterPlain': ' dal disco. Questa azione non può essere annullata.',
 }
 
-export default it
+export default itIT

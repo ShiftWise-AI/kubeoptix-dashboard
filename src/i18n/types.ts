@@ -1,7 +1,7 @@
 import type { Language } from '../services/settingsService'
 
-/** Locale catalogs used by the UI. Mapped from API Language codes. */
-export type LocaleCode = 'pt-BR' | 'en-US' | 'es' | 'it'
+/** Locale catalogs used by the UI. Same BCP 47 tags accepted by the API. */
+export type LocaleCode = 'pt-BR' | 'en-US' | 'es-ES' | 'it-IT'
 
 export type TranslationParams = Record<string, string | number>
 
@@ -212,19 +212,21 @@ export type TranslationDictionary = {
 
 export type TranslationKey = keyof TranslationDictionary
 
-export const DEFAULT_LANGUAGE: Language = 'pt-br'
+export const DEFAULT_LANGUAGE: Language = 'pt-BR'
 export const DEFAULT_LOCALE: LocaleCode = 'pt-BR'
 
+// Language and LocaleCode share the same BCP 47 tags, so these maps are identities
+// kept for clarity at the call sites (API language <-> UI locale catalog).
 export const LANGUAGE_TO_LOCALE: Record<Language, LocaleCode> = {
-  'pt-br': 'pt-BR',
-  'en-us': 'en-US',
-  es: 'es',
-  it: 'it',
+  'pt-BR': 'pt-BR',
+  'en-US': 'en-US',
+  'es-ES': 'es-ES',
+  'it-IT': 'it-IT',
 }
 
 export const LOCALE_TO_LANGUAGE: Record<LocaleCode, Language> = {
-  'pt-BR': 'pt-br',
-  'en-US': 'en-us',
-  es: 'es',
-  it: 'it',
+  'pt-BR': 'pt-BR',
+  'en-US': 'en-US',
+  'es-ES': 'es-ES',
+  'it-IT': 'it-IT',
 }
