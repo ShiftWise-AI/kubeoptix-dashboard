@@ -20,14 +20,14 @@ spec:
         app.kubernetes.io/part-of: kubeoptix
       annotations:
         image.openshift.io/triggers: >-
-          [{"from":{"kind":"ImageStreamTag","name":"kubeoptix-dashboard:latest","namespace":"shiftwise-ai"},"fieldPath":"spec.template.spec.containers[?(@.name==\"dashboard\")].image"}]
+          [{"from":{"kind":"ImageStreamTag","name":"kubeoptix-dashboard:1.0.0","namespace":"shiftwise-ai"},"fieldPath":"spec.template.spec.containers[?(@.name==\"dashboard\")].image"}]
     spec:
       serviceAccountName: kubeoptix-dashboard
       automountServiceAccountToken: true
       terminationGracePeriodSeconds: 30
       containers:
         - name: dashboard
-          image: image-registry.openshift-image-registry.svc:5000/shiftwise-ai/kubeoptix-dashboard:latest
+          image: quay.io/parraes/kubeoptix-dashboard:1.0.0
           imagePullPolicy: Always
           envFrom:
             - configMapRef:

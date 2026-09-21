@@ -18,5 +18,5 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: kubeoptix-dashboard:latest
+      name: kubeoptix-dashboard:1.0.0
   triggers: []
