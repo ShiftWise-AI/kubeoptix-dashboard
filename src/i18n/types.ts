@@ -171,8 +171,6 @@ export type TranslationDictionary = {
   'reports.couldNotRemoveAuthor': string
   'reports.couldNotRemoveCustomer': string
   'reports.completeFields': string
-  'reports.pendingChanges': string
-  'reports.pendingChangesBody': string
   'reports.switchReportWarning': string
   'reports.versionSaved': string
   'reports.couldNotSaveVersion': string
@@ -201,7 +199,6 @@ export type TranslationDictionary = {
   'reports.costumer': string
   'reports.author': string
   'reports.noAuthors': string
-  'reports.selectAuthors': string
   'reports.costumersList': string
   'reports.noCustomers': string
   'reports.selectCustomers': string
