@@ -531,17 +531,13 @@ function DocumentDependenciesPage({
   const documentStatusTitle = selectedReportName
     ? (documentStatusByReport.get(selectedReportName)?.isVersioned
       ? t('reports.versioned', { version: (documentStatusByReport.get(selectedReportName)?.versionNumber ?? 0).toFixed(1) })
-      : isDirty
-        ? t('reports.pendingChanges')
-        : t('reports.draft'))
+      : t('reports.draft'))
     : null
 
   const documentStatusVariant: 'success' | 'warning' | 'info' = selectedReportName
     ? (documentStatusByReport.get(selectedReportName)?.isVersioned
       ? 'success'
-      : isDirty
-        ? 'warning'
-        : 'info')
+      : 'info')
     : 'info'
 
   function renderStatusLabel(reportName: string) {
@@ -566,7 +562,7 @@ function DocumentDependenciesPage({
       {cards.map((card) => {
         const selectedCount = card.kind === 'author' ? selectedAuthorCount : selectedCustomerCount
         const emptyMessage = card.kind === 'author' ? t('reports.noAuthors') : t('reports.noCustomers')
-        const selectionHint = card.kind === 'author' ? t('reports.selectAuthors') : t('reports.selectCustomers')
+        const selectionHint = card.kind === 'customer' ? t('reports.selectCustomers') : null
 
         return (
           <Card key={card.kind} className="pf-v5-c-card dependency-card" isCompact>
@@ -586,7 +582,7 @@ function DocumentDependenciesPage({
             <CardBody>
               {isLoading ? <Spinner size="md" /> : card.entries.length ? (
                 <>
-                  <small>{selectionHint}</small>
+                  {selectionHint ? <small>{selectionHint}</small> : null}
                   <ul className="dependency-list">{(card.kind === 'author' ? authors : customers).map((person) => <li key={person.id}><span>{person.name}</span><Button variant="plain" aria-label={t('reports.removePerson', { name: person.name })} icon={<TrashIcon />} onClick={() => void removePerson(card.kind, person)} isDisabled={deletingPersonId !== null} isLoading={deletingPersonId === person.id} /></li>)}</ul>
                 </>
               ) : <small>{emptyMessage}</small>}
@@ -607,11 +603,6 @@ function DocumentDependenciesPage({
       <CardBody>
         {reportsError ? <Alert isInline variant="warning" title={t('reports.couldNotLoadReports')}>{reportsError}</Alert> : null}
         {documentMessage ? <Alert isInline variant="info" title={documentMessage} /> : null}
-        {selectedReportName && !isLoadingMarkdown && isDirty ? (
-          <Alert isInline variant="warning" title={t('reports.pendingChanges')}>
-            {t('reports.pendingChangesBody')}
-          </Alert>
-        ) : null}
         <div className="reports-workspace">
           <div className="reports-list-panel">
             {isLoadingReports ? (
@@ -688,12 +679,6 @@ function DocumentDependenciesPage({
             {!selectedReportName && !isLoadingMarkdown ? (
               <p className="report-editor-empty">{t('reports.chooseReport')}</p>
             ) : null}
-            {selectedReportName && !isLoadingMarkdown && (authors.length === 0 || customers.length === 0) ? (
-              <Alert isInline variant="info" title={t('reports.selectAuthors')}>
-                {authors.length === 0 ? <p>{t('reports.noAuthors')}</p> : null}
-                {customers.length === 0 ? <p>{t('reports.noCustomers')}</p> : null}
-              </Alert>
-            ) : null}
             {isLoadingMarkdown ? (
               <div className="report-editor-loading">
                 <Spinner size="lg" aria-label={t('reports.loadingReport')} />
@@ -704,9 +689,7 @@ function DocumentDependenciesPage({
                 <Alert isInline variant={documentStatusVariant} title={documentStatusTitle ?? t('reports.selectReport')}>
                   {documentStatusByReport.get(selectedReportName)?.isVersioned
                     ? t('reports.documentExists', { version: (documentStatusByReport.get(selectedReportName)?.versionNumber ?? 0).toFixed(1) })
-                    : isDirty
-                      ? t('reports.pendingChangesBody')
-                      : t('reports.versionHelp')}
+                    : t('reports.versionHelp')}
                 </Alert>
                 <FormGroup label={t('reports.documentName')} fieldId="document-name">
                   <TextInput id="document-name" value={documentName} isDisabled readOnlyVariant="default" />
@@ -729,7 +712,6 @@ function DocumentDependenciesPage({
                       />
                     ))}
                   </div>
-                  <small>{t('reports.selectAuthors')}</small>
                 </FormGroup>
                 <FormGroup label={t('reports.costumersList')} isRequired fieldId="document-costumers-list">
                   <div className="namespace-selector-list" id="document-costumers-list">
@@ -752,7 +734,6 @@ function DocumentDependenciesPage({
                     className="report-markdown-editor"
                     value={markdownContent}
                     resizeOrientation="vertical"
-                    autoResize
                     onChange={(_event, value) => setMarkdownContent(value)}
                   />
                 </FormGroup>

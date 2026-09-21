@@ -49,6 +49,7 @@ body {
   background: var(--pf-t--global--background--color--secondary--default);
   text-align: left;
   cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .workflow-step:disabled {
@@ -58,7 +59,12 @@ body {
 
 .workflow-step.is-active {
   border-color: var(--pf-t--global--color--brand--default);
-  box-shadow: inset 0 -3px 0 var(--pf-t--global--color--brand--default);
+  box-shadow: inset 0 -3px 0 var(--pf-t--global--color--brand--default), 0 0.5rem 1.25rem rgb(0 0 0 / 8%);
+}
+
+.workflow-step:not(:disabled):hover {
+  border-color: var(--pf-t--global--color--brand--default);
+  transform: translateY(-1px);
 }
 
 .workflow-step.is-complete .workflow-step-number {
@@ -151,24 +157,42 @@ body {
   background: transparent;
 }
 
-.app-description {
-  padding-inline-start: 0.75rem;
-  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
-  color: var(--pf-t--global--text--color--subtle);
-  font-size: 0.75rem;
-  font-weight: 400;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-
 .masthead-content {
   min-width: 0;
   width: 100%;
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1rem;
+}
+
+.pf-v6-c-card {
+  border-radius: 10px;
+  box-shadow: 0 0.35rem 1.25rem rgb(15 23 42 / 7%);
+}
+
+.pf-v6-c-card__header {
+  border-bottom-color: color-mix(in srgb, var(--pf-t--global--border--color--default) 70%, transparent);
+}
+
+.collection-card-heading > .pf-v6-c-title,
+.reports-page-heading > .pf-v6-c-title {
+  letter-spacing: -0.01em;
+}
+
+.app-description {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: clamp(0.9rem, 0.8rem + 0.45vw, 1.2rem);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: normal;
+  text-wrap: balance;
 }
 
 .masthead-tools {
@@ -178,6 +202,52 @@ body {
   align-items: center;
   justify-self: end;
   margin-inline-start: auto;
+}
+
+.user-menu-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 12rem;
+  padding-block: 0.125rem;
+}
+
+.user-menu-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.user-menu-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user-menu-name {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.user-menu-username {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.confirmation-modal .pf-v6-c-modal-box__body,
+.llm-warning-modal .pf-v6-c-modal-box__body {
+  padding-block-start: 0;
+}
+
+.confirmation-modal .pf-v6-c-alert,
+.llm-warning-modal .pf-v6-c-alert {
+  margin-block: 0;
 }
 
 .collect-run-actions {
@@ -193,8 +263,10 @@ body {
   font-size: 0.85rem;
 }
 
-.collection-progress-message {
-  margin: 0.5rem 0 0;
+.collection-progress-status {
+  margin: 0.4rem 0 0;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: 0.85rem;
 }
 
 .collection-progress {
@@ -317,6 +389,15 @@ body {
   padding-inline: 1rem;
 }
 
+.dependency-card {
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.dependency-card:hover {
+  box-shadow: 0 0.6rem 1.5rem rgb(15 23 42 / 11%);
+  transform: translateY(-2px);
+}
+
 .document-control-card {
   margin-bottom: 1rem;
 }
@@ -337,7 +418,9 @@ body {
 }
 
 .document-control-form__markdown textarea {
-  min-height: 16rem;
+  height: 12rem;
+  max-height: 12rem;
+  overflow-y: auto;
   font-family: var(--pf-t--global--font--family--mono);
 }
 
@@ -372,6 +455,11 @@ body {
   grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
   gap: 0.75rem;
+}
+
+.report-editor-panel,
+.reports-list-panel {
+  border-radius: 8px;
 }
 
 .report-editor-heading {
@@ -416,7 +504,10 @@ body {
 
 .report-markdown-editor {
   width: 100%;
-  min-height: 32rem;
+  height: 12rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  resize: vertical;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: 0.875rem;
   line-height: 1.5;
@@ -640,7 +731,8 @@ body {
   }
 
   .report-markdown-editor {
-    min-height: 24rem;
+    height: 10rem;
+    max-height: 10rem;
   }
 
   .report-version-form {
@@ -691,4 +783,24 @@ body {
   border-color: #f2cf74;
 }
 
+@media (max-width: 768px) {
+  .masthead-content {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
 
+  .masthead-tools {
+    justify-self: end;
+  }
+
+  .app-description {
+    min-height: 0;
+    font-size: 0.95rem;
+  }
+
+  .reports-page-heading,
+  .report-editor-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

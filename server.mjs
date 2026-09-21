@@ -21,6 +21,7 @@ const settingsApiUrl = new URL(
   process.env.SETTINGS_API_URL ?? 'http://config-api:8000',
 )
 const distDirectory = resolve('dist')
+const bindHost = process.env.DASHBOARD_BIND_HOST ?? '0.0.0.0'
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -170,8 +171,8 @@ const server = createServer(async (request, response) => {
   serveStatic(request, response)
 })
 
-server.listen(port, '0.0.0.0', () => {
-  console.log(`KubeOptix Dashboard listening on port ${port}`)
+server.listen(port, bindHost, () => {
+  console.log(`KubeOptix Dashboard listening on ${bindHost}:${port}`)
   console.log(`Harvester API target: ${harvesterApiUrl.origin}`)
   console.log(`Analyzer API target: ${analyzerApiUrl.origin}`)
   console.log(`Reporter API target: ${reporterApiUrl.origin}`)

@@ -7,6 +7,11 @@ import {
   CardBody,
   CardHeader,
   Checkbox,
+  Divider,
+  Dropdown,
+  DropdownGroup,
+  DropdownItem,
+  DropdownList,
   Flex,
   FlexItem,
   Form,
@@ -14,6 +19,7 @@ import {
   Masthead,
   MastheadBrand,
   MastheadContent,
+  MenuToggle,
   Modal,
   ModalBody,
   ModalFooter,
@@ -28,13 +34,23 @@ import {
   Progress,
   Radio,
   Spinner,
-  Switch,
   TextInput,
   TreeView,
   Title,
 } from '@patternfly/react-core'
 import type { TreeViewDataItem } from '@patternfly/react-core'
-import { ChartLineIcon, FileAltIcon, FolderIcon, FolderOpenIcon, PlayIcon, TrashIcon, UserIcon } from '@patternfly/react-icons'
+import {
+  ChartLineIcon,
+  FileAltIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  MoonIcon,
+  PlayIcon,
+  SignOutAltIcon,
+  SunIcon,
+  TrashIcon,
+  UserIcon,
+} from '@patternfly/react-icons'
 import ConfigurationsPage from './ConfigurationsPage'
 import DocumentDependenciesPage from './DocumentDependenciesPage'
 import type { DocumentReport } from './DocumentDependenciesPage'
@@ -54,7 +70,7 @@ import { runAnalysis, type AnalysisMode } from './services/analysisService'
 import { fetchAuthSession, logout, type AuthSession } from './services/authService'
 
 type MenuKey = 'harvester' | 'analyzer' | 'reports' | 'configurations'
-type ColorScheme = 'system' | 'dark'
+type ColorScheme = 'system' | 'light' | 'dark'
 
 type ApiResponseState = {
   pending: boolean
@@ -68,7 +84,7 @@ type AnalyzerReportFile = {
   createdAt: string | null
 }
 
-const MESSAGE_DISMISS_DELAY_MS = 15_000
+const MESSAGE_DISMISS_DELAY_MS = 10_000
 
 function useAutoDismissMessage(message: string | null, clearMessage: () => void) {
   const clearMessageRef = useRef(clearMessage)
@@ -260,6 +276,9 @@ async function fetchReportContent(fileName: string): Promise<string> {
   const text = await response.text()
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('kubeoptix-auth-expired'))
+    }
     let message = `Request failed with status ${response.status}`
 
     try {
@@ -297,6 +316,9 @@ async function saveReportContent(fileName: string, content: string, signal: Abor
   })
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('kubeoptix-auth-expired'))
+    }
     const responseText = await response.text()
     let message = responseText || `Request failed with status ${response.status}`
 
@@ -322,6 +344,9 @@ async function deleteReportContent(fileName: string): Promise<void> {
 
   // Treat "already gone" as success so repeated/idempotent deletes don't surface an error.
   if (!response.ok && response.status !== 404) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('kubeoptix-auth-expired'))
+    }
     const responseText = await response.text()
     let message = responseText || `Request failed with status ${response.status}`
 
@@ -349,9 +374,13 @@ function App() {
   const { t, setLanguage, locale } = useI18n()
   const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
     const savedValue = window.localStorage.getItem('kubeoptix-color-scheme')
-    return savedValue === 'dark' ? 'dark' : 'system'
+    if (savedValue === 'dark' || savedValue === 'light') {
+      return savedValue
+    }
+    return 'system'
   })
   const [authSession, setAuthSession] = useState<AuthSession | null>(null)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [authError, setAuthError] = useState(false)
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => (
     window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -370,6 +399,7 @@ function App() {
   const [loadAnalyzerNamespacesError, setLoadAnalyzerNamespacesError] = useState<string | null>(null)
   const [hasAttemptedAutoLoadAnalyzerNamespaces, setHasAttemptedAutoLoadAnalyzerNamespaces] = useState(false)
   const [mode, setMode] = useState<AnalysisMode>('predictive')
+  const [isLlmWarningModalOpen, setIsLlmWarningModalOpen] = useState(false)
   const [isDeleteAssessmentModalOpen, setIsDeleteAssessmentModalOpen] = useState(false)
   const [isAssessmentFilesModalOpen, setIsAssessmentFilesModalOpen] = useState(false)
   const [analyzerReports, setAnalyzerReports] = useState<AnalyzerReportFile[]>([])
@@ -381,6 +411,7 @@ function App() {
   const [isCollectionInProgress, setIsCollectionInProgress] = useState(false)
   const [isCollectionStatusPolling, setIsCollectionStatusPolling] = useState(false)
   const [hasCollectionStarted, setHasCollectionStarted] = useState(false)
+  const [hasCollectionSucceeded, setHasCollectionSucceeded] = useState(false)
   const [collectionProgress, setCollectionProgress] = useState(0)
   const [collectionCompletionMessage, setCollectionCompletionMessage] = useState<TranslationKey | null>(null)
   const [collectionStatusError, setCollectionStatusError] = useState<string | null>(null)
@@ -399,7 +430,7 @@ function App() {
   const [, setRunResponse] = useState<ApiResponseState>(initialResponseState)
 
   const mastheadLogo = dashboardLogo
-  const collectionCompleted = hasCollectionStarted && !isCollectionInProgress && !collectResponse.error
+  const collectionCompleted = hasCollectionSucceeded && !isCollectionInProgress && !collectResponse.error
   const analysisCompleted = hasAnalyzerStarted
     && !isAnalyzerInProgress
     && !analyzerStatusError
@@ -412,7 +443,11 @@ function App() {
   useAutoDismissMessage(collectionStatusError, () => setCollectionStatusError(null))
   useAutoDismissMessage(analyzerStatusError, () => setAnalyzerStatusError(null))
   useAutoDismissMessage(predictiveStatusError, () => setPredictiveStatusError(null))
-  useAutoDismissMessage(collectionCompletionMessage, () => setCollectionCompletionMessage(null))
+  useAutoDismissMessage(collectionCompletionMessage, () => {
+    setCollectionCompletionMessage(null)
+    setHasCollectionStarted(false)
+    setCollectionProgress(0)
+  })
   useAutoDismissMessage(analyzerCompletionMessage, () => setAnalyzerCompletionMessage(null))
 
   useEffect(() => {
@@ -669,6 +704,7 @@ function App() {
         if (progress >= 100) {
           setIsCollectionStatusPolling(false)
           setIsCollectionInProgress(false)
+          setHasCollectionSucceeded(true)
           setCollectResponse((previousState) => ({ ...previousState, pending: false }))
           setCollectionCompletionMessage('harvester.collectionCompletedContinue')
           void loadNamespaces()
@@ -931,6 +967,7 @@ function App() {
     setCollectionCompletionMessage(null)
     setIsCollectionStatusPolling(false)
     setHasCollectionStarted(true)
+    setHasCollectionSucceeded(false)
     setIsCollectionInProgress(true)
     setCollectResponse((previousState) => ({
       ...previousState,
@@ -997,9 +1034,18 @@ function App() {
     }
   }
 
-  async function handleRunAnalyzer(event: FormEvent) {
+  function handleRunAnalyzerSubmit(event: FormEvent) {
     event.preventDefault()
 
+    if (mode === 'generative') {
+      setIsLlmWarningModalOpen(true)
+      return
+    }
+
+    void handleRunAnalyzer()
+  }
+
+  async function handleRunAnalyzer() {
     setAnalyzerProgress(0)
     setAnalyzerStatusError(null)
     setPredictiveStatusError(null)
@@ -1143,23 +1189,88 @@ function App() {
             </span>
             <div className="masthead-tools">
               {authSession?.authenticated ? (
-                <Button
-                  variant="plain"
-                  icon={<UserIcon />}
-                  onClick={() => void handleLogout()}
-                  aria-label={t('auth.logout')}
+                <Dropdown
+                  isOpen={isUserMenuOpen}
+                  onOpenChange={(open) => setIsUserMenuOpen(open)}
+                  popperProps={{ position: 'right' }}
+                  toggle={(toggleRef) => (
+                    <MenuToggle
+                      ref={toggleRef}
+                      variant="plain"
+                      icon={<UserIcon />}
+                      isExpanded={isUserMenuOpen}
+                      isDisabled={isCollectionInProgress}
+                      aria-label={t('auth.userMenu')}
+                      onClick={() => setIsUserMenuOpen((previousValue) => !previousValue)}
+                    />
+                  )}
                 >
-                  {authSession.username}
-                  <span className="auth-logout-label">{t('auth.logout')}</span>
-                </Button>
+                  <DropdownList>
+                    <DropdownGroup>
+                      <DropdownItem isDisabled>
+                        <div className="user-menu-identity">
+                          <span className="user-menu-avatar">
+                            <UserIcon />
+                          </span>
+                          <div className="user-menu-text">
+                            <span className="user-menu-name">
+                              {authSession.displayName || authSession.username || 'User'}
+                            </span>
+                            {authSession.username ? (
+                              <small className="user-menu-username">{authSession.username}</small>
+                            ) : null}
+                          </div>
+                        </div>
+                      </DropdownItem>
+                    </DropdownGroup>
+                    <DropdownGroup label={t('theme.title')}>
+                      <DropdownItem
+                        icon={<SunIcon />}
+                        isDisabled={isCollectionInProgress}
+                        isSelected={colorScheme === 'system'}
+                        onClick={() => {
+                          setColorScheme('system')
+                          setIsUserMenuOpen(false)
+                        }}
+                      >
+                        {t('theme.system')}
+                      </DropdownItem>
+                      <DropdownItem
+                        icon={<SunIcon />}
+                        isDisabled={isCollectionInProgress}
+                        isSelected={colorScheme === 'light'}
+                        onClick={() => {
+                          setColorScheme('light')
+                          setIsUserMenuOpen(false)
+                        }}
+                      >
+                        {t('theme.light')}
+                      </DropdownItem>
+                      <DropdownItem
+                        icon={<MoonIcon />}
+                        isDisabled={isCollectionInProgress}
+                        isSelected={colorScheme === 'dark'}
+                        onClick={() => {
+                          setColorScheme('dark')
+                          setIsUserMenuOpen(false)
+                        }}
+                      >
+                        {t('theme.dark')}
+                      </DropdownItem>
+                    </DropdownGroup>
+                    <Divider component="li" />
+                    <DropdownItem
+                      icon={<SignOutAltIcon />}
+                      onClick={() => {
+                        setIsUserMenuOpen(false)
+                        void handleLogout()
+                      }}
+                    >
+                      {t('auth.logout')}
+                    </DropdownItem>
+                  </DropdownList>
+                </Dropdown>
               ) : null}
-              <Switch
-                id="color-scheme-switch"
-                label={colorScheme === 'dark' ? t('theme.dark') : t('theme.system')}
-                isChecked={colorScheme === 'dark'}
-                isDisabled={isCollectionInProgress}
-                onChange={(_event, checked) => setColorScheme(checked ? 'dark' : 'system')}
-              />
             </div>
           </MastheadContent>
         </Masthead>
@@ -1172,6 +1283,28 @@ function App() {
           <Alert isInline variant="warning" title={t('auth.sessionExpired')} />
         </PageSection>
       ) : null}
+      <Modal
+        className="llm-warning-modal"
+        variant={ModalVariant.small}
+        isOpen={isLlmWarningModalOpen}
+        onClose={() => setIsLlmWarningModalOpen(false)}
+      >
+        <ModalHeader title={t('analyzer.llmWarningTitle')} labelId="llm-warning-modal-title" />
+        <ModalBody id="llm-warning-modal-description">
+          {t('analyzer.llmWarningBody')}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={() => {
+            setIsLlmWarningModalOpen(false)
+            void handleRunAnalyzer()
+          }}>
+            {t('common.yesRun')}
+          </Button>
+          <Button variant="link" onClick={() => setIsLlmWarningModalOpen(false)}>
+            {t('common.cancel')}
+          </Button>
+        </ModalFooter>
+      </Modal>
       {isSystemConfigured === false ? (
         <PageSection>
           <Alert isInline variant="info" title={t('settings.initialRequired')}>
@@ -1307,11 +1440,6 @@ function App() {
                       {t('workflow.collectHint')}
                     </Alert>
                   ) : null}
-                  {selectedNamespaces.length > 0 && !isCollectionInProgress ? (
-                    <Alert isInline variant="success" title={t('workflow.collectData')}>
-                      {t('common.selected')}: {selectedNamespaces.length} ({selectedNamespacesText})
-                    </Alert>
-                  ) : null}
                   <div className="collect-run-actions">
                     <Button
                       type="button"
@@ -1332,39 +1460,24 @@ function App() {
                   </div>
                   {hasCollectionStarted ? (
                     <div className="collection-progress" aria-live="polite">
-                      <Alert
-                        isInline
-                        variant={collectionStatusError ? 'warning' : isCollectionInProgress ? 'info' : 'success'}
-                        title={collectionStatusError
-                          ? t('harvester.statusRetry')
-                          : isCollectionInProgress
-                            ? t('harvester.collecting')
-                            : t('harvester.collectionCompleted')}
-                      >
-                        {collectionStatusError ? collectionStatusError : isCollectionInProgress ? t('harvester.collecting') : t('harvester.collectionCompleted')}
-                      </Alert>
                       <Progress
                         value={collectionProgress}
                         title={t('harvester.collectionProgress')}
                         measureLocation="inside"
                       />
-                      <p className="collection-progress-message">
-                        {isCollectionInProgress
-                          ? t('harvester.collecting')
-                          : t('harvester.collectionCompleted')}
-                      </p>
-                      {collectionCompletionMessage ? (
-                        <Alert isInline variant="success" title={t(collectionCompletionMessage)} />
-                      ) : null}
-                      {collectionStatusError ? (
-                        <Alert
-                          isInline
-                          variant="warning"
-                          title={t('harvester.statusRetry')}
-                        >
+                      {!collectionStatusError ? (
+                        <p className="collection-progress-status">
+                          {isCollectionInProgress
+                            ? t('harvester.collecting')
+                            : collectionCompletionMessage
+                              ? t(collectionCompletionMessage)
+                              : t('harvester.collectionCompleted')}
+                        </p>
+                      ) : (
+                        <Alert isInline variant="warning" title={t('harvester.statusRetry')}>
                           {collectionStatusError}
                         </Alert>
-                      ) : null}
+                      )}
                     </div>
                   ) : null}
                 </Form>
@@ -1373,13 +1486,16 @@ function App() {
           </PageSection>
 
           <Modal
+            className="confirmation-modal"
             variant={ModalVariant.small}
             isOpen={isDeleteAssessmentModalOpen}
             onClose={() => setIsDeleteAssessmentModalOpen(false)}
           >
             <ModalHeader title={t('common.confirmActionTitle')} labelId="delete-assessments-modal-title" />
             <ModalBody id="delete-assessments-modal-description">
-              {t('harvester.deleteModalBody')}
+              <Alert isInline variant="warning" title={t('common.confirmActionTitle')}>
+                {t('harvester.deleteModalBody')}
+              </Alert>
             </ModalBody>
             <ModalFooter>
               <Button variant="danger" onClick={handleCleanupAssessment} isLoading={cleanupAssessmentResponse.pending}>
@@ -1465,7 +1581,7 @@ function App() {
                     {t('analyzer.runCollectionFirst')}
                   </Alert>
                 ) : null}
-                <Form onSubmit={handleRunAnalyzer}>
+                <Form onSubmit={handleRunAnalyzerSubmit}>
                   <FormGroup label={t('analyzer.namespaces')} fieldId="analyzer-namespaces-selector">
                     <Flex gap={{ default: 'gapSm' }}>
                       <FlexItem>
@@ -1540,11 +1656,6 @@ function App() {
                       {t('analyzer.runCollectionFirst')}
                     </Alert>
                   ) : null}
-                  {selectedAnalyzerNamespaces.length > 0 && !isAnalyzerInProgress ? (
-                    <Alert isInline variant="success" title={t('workflow.analyze')}>
-                      {t('common.selected')}: {selectedAnalyzerNamespaces.length} ({selectedAnalyzerNamespacesText})
-                    </Alert>
-                  ) : null}
                   <FormGroup label={t('analyzer.mode')} fieldId="run-mode">
                     <Flex direction={{ default: 'column' }}>
                       <FlexItem>
@@ -1578,56 +1689,28 @@ function App() {
                   </div>
                   {hasAnalyzerStarted ? (
                     <div className="collection-progress" aria-live="polite">
-                      <Alert
-                        isInline
-                        variant={predictiveStatusError || analyzerStatusError ? 'warning' : isAnalyzerInProgress ? 'info' : 'success'}
-                        title={predictiveStatusError
-                          ? t('analyzer.predictiveStatusRetry')
-                          : analyzerStatusError
-                            ? t('analyzer.statusRetry')
-                            : isAnalyzerInProgress
-                              ? t('analyzer.analyzing')
-                              : t('analyzer.analysisCompleted')}
-                      >
-                        {predictiveStatusError
-                          ? predictiveStatusError
-                          : analyzerStatusError
-                            ? analyzerStatusError
-                            : isAnalyzerInProgress
-                              ? t('analyzer.analyzing')
-                              : t('analyzer.analysisCompleted')}
-                      </Alert>
                       <Progress
                         value={analyzerProgress}
                         title={t('analyzer.progress')}
                         measureLocation="inside"
                       />
-                      <p className="collection-progress-message">
-                        {isAnalyzerInProgress
-                          ? t('analyzer.analyzing')
-                          : t('analyzer.analysisCompleted')}
-                      </p>
-                      {analyzerCompletionMessage ? (
-                        <Alert isInline variant="success" title={t(analyzerCompletionMessage)} />
-                      ) : null}
-                      {analyzerStatusError ? (
+                      {!predictiveStatusError && !analyzerStatusError ? (
+                        <p className="collection-progress-status">
+                          {isAnalyzerInProgress
+                            ? t('analyzer.analyzing')
+                            : analyzerCompletionMessage
+                              ? t(analyzerCompletionMessage)
+                              : t('analyzer.analysisCompleted')}
+                        </p>
+                      ) : (
                         <Alert
                           isInline
                           variant="warning"
-                          title={t('analyzer.statusRetry')}
+                          title={predictiveStatusError ? t('analyzer.predictiveStatusRetry') : t('analyzer.statusRetry')}
                         >
-                          {analyzerStatusError}
+                          {predictiveStatusError ?? analyzerStatusError}
                         </Alert>
-                      ) : null}
-                      {predictiveStatusError ? (
-                        <Alert
-                          isInline
-                          variant="warning"
-                          title={t('analyzer.predictiveStatusRetry')}
-                        >
-                          {predictiveStatusError}
-                        </Alert>
-                      ) : null}
+                      )}
                     </div>
                   ) : null}
                 </Form>

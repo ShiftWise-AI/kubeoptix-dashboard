@@ -38,22 +38,24 @@ spec:
                 secretKeyRef:
                   name: kubeoptix-dashboard-oauth-cookie
                   key: session-secret
+            - name: DASHBOARD_BIND_HOST
+              value: 127.0.0.1
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
           readinessProbe:
             httpGet:
-              path: /healthz
-              port: http
+              path: /oauth2/healthz
+              port: 4180
             initialDelaySeconds: 3
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /healthz
-              port: http
+              path: /oauth2/healthz
+              port: 4180
             initialDelaySeconds: 10
             periodSeconds: 20
             timeoutSeconds: 2

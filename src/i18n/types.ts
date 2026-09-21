@@ -24,6 +24,7 @@ export type TranslationDictionary = {
   'common.unknownRequestError': string
   'common.confirmActionTitle': string
   'auth.sessionExpired': string
+  'auth.userMenu': string
   'auth.logout': string
   'auth.logoutFailed': string
   'auth.loading': string
@@ -37,6 +38,8 @@ export type TranslationDictionary = {
   'nav.configurations': string
   'app.logoAlt': string
   'app.description': string
+  'theme.title': string
+  'theme.light': string
   'theme.dark': string
   'theme.system': string
   'workflow.progress': string
@@ -98,6 +101,8 @@ export type TranslationDictionary = {
   'analyzer.analysisCompletedOpenReports': string
   'analyzer.statusRetry': string
   'analyzer.predictiveStatusRetry': string
+  'analyzer.llmWarningTitle': string
+  'analyzer.llmWarningBody': string
   'analyzer.couldNotLoadNamespaces': string
   'analyzer.couldNotLoadReports': string
   'analyzer.couldNotRetrieveStatus': string
@@ -166,8 +171,6 @@ export type TranslationDictionary = {
   'reports.couldNotRemoveAuthor': string
   'reports.couldNotRemoveCustomer': string
   'reports.completeFields': string
-  'reports.pendingChanges': string
-  'reports.pendingChangesBody': string
   'reports.switchReportWarning': string
   'reports.versionSaved': string
   'reports.couldNotSaveVersion': string
@@ -196,7 +199,6 @@ export type TranslationDictionary = {
   'reports.costumer': string
   'reports.author': string
   'reports.noAuthors': string
-  'reports.selectAuthors': string
   'reports.costumersList': string
   'reports.noCustomers': string
   'reports.selectCustomers': string
