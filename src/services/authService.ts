@@ -1,3 +1,4 @@
+import { AUTH_LOGOUT_REQUEST_TIMEOUT_MS } from '../config/api'
 import { executeRequest } from './httpClient'
 
 export type AuthSession = {
@@ -15,5 +16,6 @@ export async function fetchAuthSession(): Promise<AuthSession> {
 }
 
 export async function logout(): Promise<void> {
-  await executeRequest('POST', '/api/auth/logout')
+  // Bounded timeout so a stalled request never leaves the UI stuck on the logout action.
+  await executeRequest('POST', '/api/auth/logout', undefined, { timeoutMs: AUTH_LOGOUT_REQUEST_TIMEOUT_MS })
 }

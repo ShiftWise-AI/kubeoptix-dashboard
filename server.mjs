@@ -22,6 +22,12 @@ const settingsApiUrl = new URL(
 )
 const distDirectory = resolve('dist')
 const bindHost = process.env.DASHBOARD_BIND_HOST ?? '0.0.0.0'
+// The OpenShift OAuth reverse-proxy sidecar in front of this app forwards already-authenticated
+// requests straight through to us instead of handling its own /oauth2/sign_out internally, so its
+// session cookie is never cleared by visiting that path. We clear it ourselves here; our response
+// still passes back through the sidecar to the browser, so this is the only reliable way to end
+// the sidecar's session on logout.
+const oauthProxyCookieName = process.env.OAUTH_PROXY_COOKIE_NAME ?? '_oauth_proxy'
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -120,7 +126,7 @@ const server = createServer(async (request, response) => {
   }
 
   if (requestUrl.pathname === '/api/auth/logout' && request.method === 'POST') {
-    clearSession(request, response)
+    clearSession(request, response, [oauthProxyCookieName])
     response.writeHead(204)
     response.end()
     return

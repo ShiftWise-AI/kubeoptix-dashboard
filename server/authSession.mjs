@@ -73,10 +73,23 @@ export function establishSession(request, response) {
   return { identity, cookie: value }
 }
 
-export function clearSession(request, response) {
+// additionalCookieNames lets callers also expire cookies this module does not own (e.g. the
+// OAuth reverse-proxy sidecar's session cookie), since that response passes back through the
+// sidecar to the browser and is the only reliable way to clear it when authenticated requests
+// bypass the sidecar's own sign-out handling. Those cookies are set with an explicit Domain
+// attribute by the sidecar, so the clearing directive must repeat the same Domain (derived from
+// the request's Host header) or the browser treats it as a different cookie and keeps the
+// original alive.
+export function clearSession(request, response, additionalCookieNames = []) {
   const cookie = parseCookies(request.headers.cookie)[SESSION_COOKIE_NAME]
   if (cookie) sessions.delete(cookie.split('.')[0])
-  response.setHeader('Set-Cookie', `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax`)
+  const host = (request.headers.host ?? '').split(':')[0]
+  const ownCookie = `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax`
+  const otherCookies = additionalCookieNames.map(
+    (name) => `${name}=; Path=/; ${host ? `Domain=${host}; ` : ''}HttpOnly; Secure; Max-Age=0; SameSite=Lax`,
+  )
+  const cookieHeaders = [ownCookie, ...otherCookies]
+  response.setHeader('Set-Cookie', cookieHeaders.length > 1 ? cookieHeaders : cookieHeaders[0])
 }
 
 export function clearSessionsForTests() {

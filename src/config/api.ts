@@ -20,6 +20,8 @@ export const CORE_AI_API_PATH = '/api/core-ai'
 export const CORE_AI_REPORTS_PATH = '/api/reports'
 export const CORE_AI_REQUEST_TIMEOUT_MS = 120_000
 
+export const AUTH_LOGOUT_REQUEST_TIMEOUT_MS = 8_000
+
 export const SETTINGS_API_PATH = '/api/settings'
 export const SYSTEM_SETTINGS_PATH = `${SETTINGS_API_PATH}/system-settings`
 export const SYSTEM_SETTINGS_STATUS_PATH = `${SYSTEM_SETTINGS_PATH}/status`

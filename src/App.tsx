@@ -501,8 +501,10 @@ function App() {
     try {
       await logout()
     } catch {
+      // Clearing the local session is best-effort: even if it fails (timeout, network
+      // hiccup, upstream error), still proceed to end the OAuth proxy session below
+      // instead of leaving the user stuck on the page with no feedback.
       setAuthError(true)
-      return
     }
     window.location.assign('/oauth2/sign_out')
   }
