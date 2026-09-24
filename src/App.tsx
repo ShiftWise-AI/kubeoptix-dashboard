@@ -54,6 +54,7 @@ import {
 import ConfigurationsPage from './ConfigurationsPage'
 import DocumentDependenciesPage from './DocumentDependenciesPage'
 import type { DocumentReport } from './DocumentDependenciesPage'
+import { EmptyListState, SkeletonList } from './components/ListStates'
 import dashboardLogo from '../image/logo.png'
 import { fetchSystemSettings } from './services/settingsService'
 import type { SystemSettings } from './services/settingsService'
@@ -1415,9 +1416,11 @@ function App() {
                       <Alert isInline variant="danger" title={loadNamespacesError} />
                     ) : null}
                     <div className="namespace-selector-list" id="namespaces-selector">
-                      {isLoadingNamespaces ? <Spinner size="md" /> : null}
+                      {isLoadingNamespaces ? (
+                        <SkeletonList label={t('common.loading')} rows={4} />
+                      ) : null}
                       {!isLoadingNamespaces && filteredNamespaces.length === 0 ? (
-                        <small>{t('harvester.noNamespaces')}</small>
+                        <EmptyListState title={t('harvester.noNamespaces')} />
                       ) : null}
                       {!isLoadingNamespaces
                         ? filteredNamespaces.map((namespace) => (
@@ -1519,9 +1522,7 @@ function App() {
             <ModalHeader title={t('harvester.assessmentFiles')} labelId="assessment-files-modal-title" />
             <ModalBody id="assessment-files-modal-description">
               {isLoadingAssessmentTree && assessmentTree.length === 0 ? (
-                <div className="assessment-tree-loading">
-                  <Spinner size="lg" aria-label={t('harvester.loadingAssessmentFiles')} />
-                </div>
+                <SkeletonList label={t('harvester.loadingAssessmentFiles')} rows={5} />
               ) : null}
               {assessmentTreeError ? (
                 <p className="modal-feedback-message is-warning">{t('harvester.couldNotUpdateFileList', { error: assessmentTreeError })}</p>
@@ -1535,6 +1536,9 @@ function App() {
                     hasAnimations
                   />
                 </div>
+              ) : null}
+              {!isLoadingAssessmentTree && !assessmentTreeError && assessmentTree.length === 0 ? (
+                <EmptyListState title={t('harvester.noAssessmentFiles')} icon={<FolderOpenIcon />} />
               ) : null}
             </ModalBody>
           </Modal>
@@ -1631,9 +1635,11 @@ function App() {
                       <Alert isInline variant="danger" title={loadAnalyzerNamespacesError} />
                     ) : null}
                     <div className="namespace-selector-list" id="analyzer-namespaces-selector">
-                      {isLoadingAnalyzerNamespaces ? <Spinner size="md" /> : null}
+                      {isLoadingAnalyzerNamespaces ? (
+                        <SkeletonList label={t('common.loading')} rows={4} />
+                      ) : null}
                       {!isLoadingAnalyzerNamespaces && filteredAnalyzerNamespaces.length === 0 ? (
-                        <small>{t('analyzer.noNamespaces')}</small>
+                        <EmptyListState title={t('analyzer.noNamespaces')} />
                       ) : null}
                       {!isLoadingAnalyzerNamespaces
                         ? filteredAnalyzerNamespaces.map((namespace) => (

@@ -12,6 +12,7 @@ export type TranslationDictionary = {
   'common.save': string
   'common.refresh': string
   'common.refreshing': string
+  'common.loading': string
   'common.run': string
   'common.yesRun': string
   'common.yesDelete': string
@@ -70,6 +71,7 @@ export type TranslationDictionary = {
   'harvester.assessmentFiles': string
   'harvester.loadingAssessmentFiles': string
   'harvester.assessmentTree': string
+  'harvester.noAssessmentFiles': string
   'harvester.couldNotUpdateFileList': string
   'harvester.couldNotLoadNamespaces': string
   'harvester.noNamespacesReturned': string

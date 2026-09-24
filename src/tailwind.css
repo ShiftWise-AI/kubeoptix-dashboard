@@ -1,0 +1,9 @@
+@layer theme, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --color-muted-foreground: #6a717d;
+  --color-border: #d2d2d2;
+}
