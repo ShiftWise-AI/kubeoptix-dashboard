@@ -88,6 +88,7 @@ const ptBR: TranslationDictionary = {
   'analyzer.mode': 'Modo',
   'analyzer.modeMl': 'Machine Learning',
   'analyzer.modeLlm': 'LLM',
+  'analyzer.currentFile': 'Processando arquivo: {{file}}',
   'analyzer.progress': 'Progresso do analyzer',
   'analyzer.analyzing': 'Analisando dados. O status é atualizado a cada 2 segundos.',
   'analyzer.analysisCompleted': 'Análise concluída.',

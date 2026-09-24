@@ -269,6 +269,16 @@ body {
   font-size: 0.85rem;
 }
 
+.collection-progress-file {
+  margin: 0.3rem 0 0;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: 0.8rem;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .collection-progress {
   margin-top: 1rem;
 }

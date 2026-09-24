@@ -88,6 +88,7 @@ const enUS: TranslationDictionary = {
   'analyzer.mode': 'Mode',
   'analyzer.modeMl': 'Machine Learning',
   'analyzer.modeLlm': 'LLM',
+  'analyzer.currentFile': 'Processing file: {{file}}',
   'analyzer.progress': 'Analyzer progress',
   'analyzer.analyzing': 'Analyzing data. Status updates every 2 seconds.',
   'analyzer.analysisCompleted': 'Analysis completed.',

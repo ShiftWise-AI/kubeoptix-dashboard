@@ -193,6 +193,16 @@ function normalizeProgressResponse(payload: unknown, invalidMessage: string): nu
   return normalizeCollectionProgress(payload, invalidMessage)
 }
 
+// core-ai status responses may include the file currently being analyzed (current_file).
+function extractCurrentFile(payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) {
+    return null
+  }
+
+  const currentFile = (payload as Record<string, unknown>).current_file
+  return typeof currentFile === 'string' && currentFile.trim() ? currentFile : null
+}
+
 function normalizeAssessmentTree(
   payload: unknown,
   parentPath = '',
@@ -422,6 +432,7 @@ function App() {
   const [isAnalyzerInProgress, setIsAnalyzerInProgress] = useState(false)
   const [hasAnalyzerStarted, setHasAnalyzerStarted] = useState(false)
   const [analyzerProgress, setAnalyzerProgress] = useState(0)
+  const [analyzerCurrentFile, setAnalyzerCurrentFile] = useState<string | null>(null)
   const [analyzerCompletionMessage, setAnalyzerCompletionMessage] = useState<TranslationKey | null>(null)
   const [analyzerStatusError, setAnalyzerStatusError] = useState<string | null>(null)
   const [predictiveStatusError, setPredictiveStatusError] = useState<string | null>(null)
@@ -809,11 +820,13 @@ function App() {
         }
 
         setAnalyzerProgress(progress)
+        setAnalyzerCurrentFile(extractCurrentFile(result.payload))
         setPredictiveStatusError(null)
 
         if (progress >= 100) {
           setIsPredictiveStatusPolling(false)
           setIsAnalyzerInProgress(false)
+          setAnalyzerCurrentFile(null)
           setRunResponse((previousState) => ({ ...previousState, pending: false }))
           setAnalyzerCompletionMessage('analyzer.analysisCompletedOpenReports')
           void loadAnalyzerReports()
@@ -860,11 +873,13 @@ function App() {
         }
 
         setAnalyzerProgress(progress)
+        setAnalyzerCurrentFile(extractCurrentFile(result.payload))
         setAnalyzerStatusError(null)
 
         if (progress >= 100) {
           setIsAnalyzerStatusPolling(false)
           setIsAnalyzerInProgress(false)
+          setAnalyzerCurrentFile(null)
           setRunResponse((previousState) => ({ ...previousState, pending: false }))
           setAnalyzerCompletionMessage('analyzer.analysisCompletedOpenReports')
           void loadAnalyzerReports()
@@ -1050,6 +1065,7 @@ function App() {
 
   async function handleRunAnalyzer() {
     setAnalyzerProgress(0)
+    setAnalyzerCurrentFile(null)
     setAnalyzerStatusError(null)
     setPredictiveStatusError(null)
     setAnalyzerCompletionMessage(null)
@@ -1702,6 +1718,11 @@ function App() {
                         title={t('analyzer.progress')}
                         measureLocation="inside"
                       />
+                      {isAnalyzerInProgress && analyzerCurrentFile ? (
+                        <p className="collection-progress-file">
+                          {t('analyzer.currentFile', { file: analyzerCurrentFile })}
+                        </p>
+                      ) : null}
                       {!predictiveStatusError && !analyzerStatusError ? (
                         <p className="collection-progress-status">
                           {isAnalyzerInProgress

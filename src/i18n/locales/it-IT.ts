@@ -88,6 +88,7 @@ const itIT: TranslationDictionary = {
   'analyzer.mode': 'Modalità',
   'analyzer.modeMl': 'Machine Learning',
   'analyzer.modeLlm': 'LLM',
+  'analyzer.currentFile': 'Elaborazione file: {{file}}',
   'analyzer.progress': 'Avanzamento dell\'analyzer',
   'analyzer.analyzing': 'Analisi dei dati in corso. Lo stato si aggiorna ogni 2 secondi.',
   'analyzer.analysisCompleted': 'Analisi completata.',

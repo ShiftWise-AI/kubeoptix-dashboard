@@ -88,6 +88,7 @@ const esES: TranslationDictionary = {
   'analyzer.mode': 'Modo',
   'analyzer.modeMl': 'Machine Learning',
   'analyzer.modeLlm': 'LLM',
+  'analyzer.currentFile': 'Procesando archivo: {{file}}',
   'analyzer.progress': 'Progreso del analyzer',
   'analyzer.analyzing': 'Analizando datos. El estado se actualiza cada 2 segundos.',
   'analyzer.analysisCompleted': 'Análisis completado.',

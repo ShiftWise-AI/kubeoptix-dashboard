@@ -98,6 +98,7 @@ export type TranslationDictionary = {
   'analyzer.modeMl': string
   'analyzer.modeLlm': string
   'analyzer.progress': string
+  'analyzer.currentFile': string
   'analyzer.analyzing': string
   'analyzer.analysisCompleted': string
   'analyzer.analysisCompletedOpenReports': string
