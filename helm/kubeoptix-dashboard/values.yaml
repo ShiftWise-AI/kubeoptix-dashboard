@@ -1,5 +1,7 @@
 buildOnly: false
 environmentFile: ""
+dashboard:
+  image: quay.io/parraes/kubeoptix-dashboard:1.0.0
 oauthProxy:
   image: quay.io/openshift/origin-oauth-proxy:4.18
   routeHost: ""

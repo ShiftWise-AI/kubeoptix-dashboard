@@ -54,6 +54,7 @@ import {
 import ConfigurationsPage from './ConfigurationsPage'
 import DocumentDependenciesPage from './DocumentDependenciesPage'
 import type { DocumentReport } from './DocumentDependenciesPage'
+import { EmptyListState, SkeletonList } from './components/ListStates'
 import dashboardLogo from '../image/logo.png'
 import { fetchSystemSettings } from './services/settingsService'
 import type { SystemSettings } from './services/settingsService'
@@ -190,6 +191,30 @@ function normalizeProgressResponse(payload: unknown, invalidMessage: string): nu
   }
 
   return normalizeCollectionProgress(payload, invalidMessage)
+}
+
+// core-ai status responses may include the file currently being analyzed (current_file).
+function extractCurrentFile(payload: unknown): string | null {
+  if (typeof payload !== 'object' || payload === null) {
+    return null
+  }
+
+  const currentFile = (payload as Record<string, unknown>).current_file
+  return typeof currentFile === 'string' && currentFile.trim() ? currentFile : null
+}
+
+function extractFileProgress(payload: unknown): { processed: number; total: number } {
+  if (typeof payload !== 'object' || payload === null) {
+    return { processed: 0, total: 0 }
+  }
+
+  const value = payload as Record<string, unknown>
+  const processed = typeof value.files_processed === 'number' ? value.files_processed : 0
+  const total = typeof value.files_total === 'number' ? value.files_total : 0
+  return {
+    processed: Math.max(0, Math.floor(processed)),
+    total: Math.max(0, Math.floor(total)),
+  }
 }
 
 function normalizeAssessmentTree(
@@ -421,6 +446,8 @@ function App() {
   const [isAnalyzerInProgress, setIsAnalyzerInProgress] = useState(false)
   const [hasAnalyzerStarted, setHasAnalyzerStarted] = useState(false)
   const [analyzerProgress, setAnalyzerProgress] = useState(0)
+  const [analyzerCurrentFile, setAnalyzerCurrentFile] = useState<string | null>(null)
+  const [analyzerFilesProgress, setAnalyzerFilesProgress] = useState({ processed: 0, total: 0 })
   const [analyzerCompletionMessage, setAnalyzerCompletionMessage] = useState<TranslationKey | null>(null)
   const [analyzerStatusError, setAnalyzerStatusError] = useState<string | null>(null)
   const [predictiveStatusError, setPredictiveStatusError] = useState<string | null>(null)
@@ -808,11 +835,14 @@ function App() {
         }
 
         setAnalyzerProgress(progress)
+        setAnalyzerCurrentFile(extractCurrentFile(result.payload))
+        setAnalyzerFilesProgress(extractFileProgress(result.payload))
         setPredictiveStatusError(null)
 
         if (progress >= 100) {
           setIsPredictiveStatusPolling(false)
           setIsAnalyzerInProgress(false)
+          setAnalyzerCurrentFile(null)
           setRunResponse((previousState) => ({ ...previousState, pending: false }))
           setAnalyzerCompletionMessage('analyzer.analysisCompletedOpenReports')
           void loadAnalyzerReports()
@@ -828,7 +858,7 @@ function App() {
         )
       }
 
-      pollingTimeout = window.setTimeout(pollPredictiveStatus, 2000)
+      pollingTimeout = window.setTimeout(pollPredictiveStatus, 750)
     }
 
     void pollPredictiveStatus()
@@ -859,6 +889,8 @@ function App() {
         }
 
         setAnalyzerProgress(progress)
+        setAnalyzerCurrentFile(extractCurrentFile(result.payload))
+        setAnalyzerFilesProgress(extractFileProgress(result.payload))
         setAnalyzerStatusError(null)
 
         if (progress >= 100) {
@@ -879,7 +911,7 @@ function App() {
         )
       }
 
-      pollingTimeout = window.setTimeout(pollAnalyzerStatus, 2000)
+      pollingTimeout = window.setTimeout(pollAnalyzerStatus, 750)
     }
 
     void pollAnalyzerStatus()
@@ -1049,6 +1081,7 @@ function App() {
 
   async function handleRunAnalyzer() {
     setAnalyzerProgress(0)
+    setAnalyzerCurrentFile(null)
     setAnalyzerStatusError(null)
     setPredictiveStatusError(null)
     setAnalyzerCompletionMessage(null)
@@ -1415,9 +1448,11 @@ function App() {
                       <Alert isInline variant="danger" title={loadNamespacesError} />
                     ) : null}
                     <div className="namespace-selector-list" id="namespaces-selector">
-                      {isLoadingNamespaces ? <Spinner size="md" /> : null}
+                      {isLoadingNamespaces ? (
+                        <SkeletonList label={t('common.loading')} rows={4} />
+                      ) : null}
                       {!isLoadingNamespaces && filteredNamespaces.length === 0 ? (
-                        <small>{t('harvester.noNamespaces')}</small>
+                        <EmptyListState title={t('harvester.noNamespaces')} />
                       ) : null}
                       {!isLoadingNamespaces
                         ? filteredNamespaces.map((namespace) => (
@@ -1519,9 +1554,7 @@ function App() {
             <ModalHeader title={t('harvester.assessmentFiles')} labelId="assessment-files-modal-title" />
             <ModalBody id="assessment-files-modal-description">
               {isLoadingAssessmentTree && assessmentTree.length === 0 ? (
-                <div className="assessment-tree-loading">
-                  <Spinner size="lg" aria-label={t('harvester.loadingAssessmentFiles')} />
-                </div>
+                <SkeletonList label={t('harvester.loadingAssessmentFiles')} rows={5} />
               ) : null}
               {assessmentTreeError ? (
                 <p className="modal-feedback-message is-warning">{t('harvester.couldNotUpdateFileList', { error: assessmentTreeError })}</p>
@@ -1535,6 +1568,9 @@ function App() {
                     hasAnimations
                   />
                 </div>
+              ) : null}
+              {!isLoadingAssessmentTree && !assessmentTreeError && assessmentTree.length === 0 ? (
+                <EmptyListState title={t('harvester.noAssessmentFiles')} icon={<FolderOpenIcon />} />
               ) : null}
             </ModalBody>
           </Modal>
@@ -1631,9 +1667,11 @@ function App() {
                       <Alert isInline variant="danger" title={loadAnalyzerNamespacesError} />
                     ) : null}
                     <div className="namespace-selector-list" id="analyzer-namespaces-selector">
-                      {isLoadingAnalyzerNamespaces ? <Spinner size="md" /> : null}
+                      {isLoadingAnalyzerNamespaces ? (
+                        <SkeletonList label={t('common.loading')} rows={4} />
+                      ) : null}
                       {!isLoadingAnalyzerNamespaces && filteredAnalyzerNamespaces.length === 0 ? (
-                        <small>{t('analyzer.noNamespaces')}</small>
+                        <EmptyListState title={t('analyzer.noNamespaces')} />
                       ) : null}
                       {!isLoadingAnalyzerNamespaces
                         ? filteredAnalyzerNamespaces.map((namespace) => (
@@ -1696,6 +1734,16 @@ function App() {
                         title={t('analyzer.progress')}
                         measureLocation="inside"
                       />
+                      {isAnalyzerInProgress && analyzerCurrentFile ? (
+                        <p className="collection-progress-file">
+                          {t('analyzer.currentFile', { file: analyzerCurrentFile })}
+                        </p>
+                      ) : null}
+                      {analyzerFilesProgress.total > 0 ? (
+                        <p className="collection-progress-status">
+                          {t('analyzer.filesProgress', analyzerFilesProgress)}
+                        </p>
+                      ) : null}
                       {!predictiveStatusError && !analyzerStatusError ? (
                         <p className="collection-progress-status">
                           {isAnalyzerInProgress

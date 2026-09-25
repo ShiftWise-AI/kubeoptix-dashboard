@@ -27,7 +27,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: dashboard
-          image: quay.io/parraes/kubeoptix-dashboard:1.0.0
+          image: {{ .Values.dashboard.image | quote }}
           imagePullPolicy: Always
           envFrom:
             - configMapRef:

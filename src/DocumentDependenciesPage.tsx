@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Alert, Button, Card, CardBody, CardHeader, Checkbox, Flex, FlexItem, Form, FormGroup, Label, Menu, MenuContent, MenuItem, MenuList, Modal, ModalBody, ModalFooter, ModalHeader, ModalVariant, PageSection, Spinner, TextArea, TextInput, Title, Tooltip } from '@patternfly/react-core'
+import { Alert, Button, Card, CardBody, CardHeader, Checkbox, Flex, FlexItem, Form, FormGroup, Label, Menu, MenuContent, MenuItem, MenuList, Modal, ModalBody, ModalFooter, ModalHeader, ModalVariant, PageSection, TextArea, TextInput, Title, Tooltip } from '@patternfly/react-core'
 import { CheckCircleIcon, DownloadIcon, EyeIcon, FileAltIcon, FileInvoiceIcon, FilePdfIcon, PencilAltIcon, PlusIcon, TrashIcon, UserIcon, UsersIcon } from '@patternfly/react-icons'
 import MarkdownViewer from './MarkdownViewer'
+import { EmptyListState, SkeletonList } from './components/ListStates'
 import {
   createPerson,
   deleteDocument,
@@ -18,12 +19,12 @@ import { useI18n } from './i18n'
 
 type DialogKind = 'author' | 'customer' | null
 
-export type DocumentReport = {
+export interface DocumentReport {
   name: string
   createdAt: string | null
 }
 
-type DocumentDependenciesPageProps = {
+interface DocumentDependenciesPageProps {
   reports: DocumentReport[]
   isLoadingReports: boolean
   reportsError: string | null
@@ -31,6 +32,15 @@ type DocumentDependenciesPageProps = {
   fetchReportContent: (fileName: string) => Promise<string>
   saveReportContent: (fileName: string, content: string) => Promise<void>
   deleteReportContent: (fileName: string) => Promise<void>
+}
+
+interface DependencyCardModel {
+  kind: Exclude<DialogKind, null>
+  title: string
+  icon: ReactNode
+  people: Person[]
+  emptyMessage: string
+  selectionHint?: string
 }
 
 // Versioning status of a report's document, used to render the draft/versioned indicator.
@@ -117,13 +127,17 @@ function DocumentDependenciesPage({
   const [deleteReportError, setDeleteReportError] = useState<string | null>(null)
   // Base report names already saved as documents in the database (looked up before the disk listing).
   const [dbReportBaseNames, setDbReportBaseNames] = useState<string[]>([])
+  const [isLoadingDbReportBaseNames, setIsLoadingDbReportBaseNames] = useState(true)
   const reportLoadSequence = useRef(0)
 
   async function loadDbReportBaseNames() {
+    setIsLoadingDbReportBaseNames(true)
     try {
       setDbReportBaseNames(await fetchAllDocumentBaseNames())
     } catch {
       setDbReportBaseNames([])
+    } finally {
+      setIsLoadingDbReportBaseNames(false)
     }
   }
 
@@ -513,10 +527,12 @@ function DocumentDependenciesPage({
   const selectedAuthorCount = authors.filter((author) => authorIds.includes(author.id)).length
   const selectedCustomerCount = customers.filter((customer) => costumersListIds.includes(customer.id)).length
 
-  const cards: Array<{ kind: Exclude<DialogKind, null>; title: string; icon: ReactNode; entries: Array<{ id: string; label: string }> }> = [
-    { kind: 'author', title: t('reports.authors'), icon: <UserIcon className="section-title-icon" />, entries: authors.map((item) => ({ id: item.id, label: item.name })) },
-    { kind: 'customer', title: t('reports.customers'), icon: <UsersIcon className="section-title-icon" />, entries: customers.map((item) => ({ id: item.id, label: item.name })) },
+  const cards: DependencyCardModel[] = [
+    { kind: 'author', title: t('reports.authors'), icon: <UserIcon className="section-title-icon" />, people: authors, emptyMessage: t('reports.noAuthors') },
+    { kind: 'customer', title: t('reports.customers'), icon: <UsersIcon className="section-title-icon" />, people: customers, emptyMessage: t('reports.noCustomers'), selectionHint: t('reports.selectCustomers') },
   ]
+
+  const isReportListLoading = isLoadingReports || isLoadingDbReportBaseNames
 
   // Save is only relevant once something differs from the last loaded/saved state.
   const isDirty = !baseline
@@ -561,8 +577,6 @@ function DocumentDependenciesPage({
     <div className="dependency-grid">
       {cards.map((card) => {
         const selectedCount = card.kind === 'author' ? selectedAuthorCount : selectedCustomerCount
-        const emptyMessage = card.kind === 'author' ? t('reports.noAuthors') : t('reports.noCustomers')
-        const selectionHint = card.kind === 'customer' ? t('reports.selectCustomers') : null
 
         return (
           <Card key={card.kind} className="pf-v5-c-card dependency-card" isCompact>
@@ -580,12 +594,12 @@ function DocumentDependenciesPage({
               </div>
             </CardHeader>
             <CardBody>
-              {isLoading ? <Spinner size="md" /> : card.entries.length ? (
+              {isLoading ? <SkeletonList label={t('common.loading')} rows={3} /> : card.people.length ? (
                 <>
-                  {selectionHint ? <small>{selectionHint}</small> : null}
-                  <ul className="dependency-list">{(card.kind === 'author' ? authors : customers).map((person) => <li key={person.id}><span>{person.name}</span><Button variant="plain" aria-label={t('reports.removePerson', { name: person.name })} icon={<TrashIcon />} onClick={() => void removePerson(card.kind, person)} isDisabled={deletingPersonId !== null} isLoading={deletingPersonId === person.id} /></li>)}</ul>
+                  {card.selectionHint ? <small className="text-muted-foreground">{card.selectionHint}</small> : null}
+                  <ul className="dependency-list">{card.people.map((person) => <li key={person.id}><span>{person.name}</span><Button variant="plain" aria-label={t('reports.removePerson', { name: person.name })} icon={<TrashIcon />} onClick={() => void removePerson(card.kind, person)} isDisabled={deletingPersonId !== null} isLoading={deletingPersonId === person.id} /></li>)}</ul>
                 </>
-              ) : <small>{emptyMessage}</small>}
+              ) : <EmptyListState title={card.emptyMessage} icon={card.icon} />}
             </CardBody>
           </Card>
         )
@@ -595,8 +609,8 @@ function DocumentDependenciesPage({
       <CardHeader>
         <div className="reports-page-heading">
           <Title headingLevel="h2" size="xl"><span className="section-title"><FileInvoiceIcon className="section-title-icon" />{t('reports.title')}</span></Title>
-          <Button type="button" variant="secondary" onClick={onRefreshReports} isDisabled={isLoadingReports}>
-            {isLoadingReports ? t('common.refreshing') : t('common.refresh')}
+          <Button type="button" variant="secondary" onClick={onRefreshReports} isDisabled={isReportListLoading}>
+            {isReportListLoading ? t('common.refreshing') : t('common.refresh')}
           </Button>
         </div>
       </CardHeader>
@@ -605,13 +619,13 @@ function DocumentDependenciesPage({
         {documentMessage ? <Alert isInline variant="info" title={documentMessage} /> : null}
         <div className="reports-workspace">
           <div className="reports-list-panel">
-            {isLoadingReports ? (
-              <div className="assessment-tree-loading">
-                <Spinner size="lg" aria-label={t('reports.loadingReports')} />
-              </div>
+            {isReportListLoading ? (
+              <SkeletonList label={t('reports.loadingReports')} rows={5} />
             ) : null}
-            {!isLoadingReports && mergedReports.length === 0 ? <small>{t('reports.noReports')}</small> : null}
-            {!isLoadingReports && mergedReports.length > 0 ? (
+            {!isReportListLoading && mergedReports.length === 0 ? (
+              <EmptyListState title={t('reports.noReports')} icon={<FileAltIcon />} />
+            ) : null}
+            {!isReportListLoading && mergedReports.length > 0 ? (
               <Menu className="report-files-menu" aria-label={t('reports.reportFiles')}>
                 <MenuContent>
                   <MenuList>
@@ -677,12 +691,10 @@ function DocumentDependenciesPage({
               <Alert isInline variant="danger" title={t('reports.couldNotLoadTitle')}>{markdownContentError}</Alert>
             ) : null}
             {!selectedReportName && !isLoadingMarkdown ? (
-              <p className="report-editor-empty">{t('reports.chooseReport')}</p>
+              <EmptyListState title={t('reports.selectReport')} description={t('reports.chooseReport')} icon={<FileAltIcon />} />
             ) : null}
             {isLoadingMarkdown ? (
-              <div className="report-editor-loading">
-                <Spinner size="lg" aria-label={t('reports.loadingReport')} />
-              </div>
+              <SkeletonList label={t('reports.loadingReport')} rows={8} />
             ) : null}
             {selectedReportName && !isLoadingMarkdown ? (
               <Form className="document-control-form" onSubmit={(event) => { event.preventDefault(); void submitDocument() }}>
@@ -701,8 +713,9 @@ function DocumentDependenciesPage({
                 <FormGroup label={t('reports.costumer')} isRequired fieldId="document-costumer"><TextInput id="document-costumer" value={costumer} onChange={(_event, value) => setCostumer(value)} /></FormGroup>
                 <FormGroup label={t('reports.author')} isRequired fieldId="document-author">
                   <div className="namespace-selector-list" id="document-author">
-                    {authors.length === 0 ? <small>{t('reports.noAuthors')}</small> : null}
-                    {authors.map((author) => (
+                    {isLoading ? <SkeletonList label={t('common.loading')} rows={3} /> : null}
+                    {!isLoading && authors.length === 0 ? <EmptyListState title={t('reports.noAuthors')} icon={<UserIcon />} /> : null}
+                    {!isLoading ? authors.map((author) => (
                       <Checkbox
                         key={author.id}
                         id={`document-author-${author.id}`}
@@ -710,13 +723,14 @@ function DocumentDependenciesPage({
                         isChecked={authorIds.includes(author.id)}
                         onChange={(_event, checked) => toggleAuthor(author.id, checked)}
                       />
-                    ))}
+                    )) : null}
                   </div>
                 </FormGroup>
                 <FormGroup label={t('reports.costumersList')} isRequired fieldId="document-costumers-list">
                   <div className="namespace-selector-list" id="document-costumers-list">
-                    {customers.length === 0 ? <small>{t('reports.noCustomers')}</small> : null}
-                    {customers.map((customer) => (
+                    {isLoading ? <SkeletonList label={t('common.loading')} rows={3} /> : null}
+                    {!isLoading && customers.length === 0 ? <EmptyListState title={t('reports.noCustomers')} icon={<UsersIcon />} /> : null}
+                    {!isLoading ? customers.map((customer) => (
                       <Checkbox
                         key={customer.id}
                         id={`document-costumers-list-${customer.id}`}
@@ -724,9 +738,9 @@ function DocumentDependenciesPage({
                         isChecked={costumersListIds.includes(customer.id)}
                         onChange={(_event, checked) => toggleCostumersListEntry(customer.id, checked)}
                       />
-                    ))}
+                    )) : null}
                   </div>
-                  <small>{t('reports.selectCustomers')}</small>
+                  <small className="text-muted-foreground">{t('reports.selectCustomers')}</small>
                 </FormGroup>
                 <FormGroup className="document-control-form__markdown" label={t('reports.markdownContent')} isRequired fieldId="document-markdown-content">
                   <TextArea
