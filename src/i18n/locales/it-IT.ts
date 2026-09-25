@@ -90,6 +90,7 @@ const itIT: TranslationDictionary = {
   'analyzer.modeLlm': 'LLM',
   'analyzer.currentFile': 'Elaborazione file: {{file}}',
   'analyzer.progress': 'Avanzamento dell\'analyzer',
+  'analyzer.filesProgress': 'File elaborati: {{processed}} di {{total}}',
   'analyzer.analyzing': 'Analisi dei dati in corso. Lo stato si aggiorna ogni 2 secondi.',
   'analyzer.analysisCompleted': 'Analisi completata.',
   'analyzer.analysisCompletedOpenReports': 'Analisi completata. Apri Report per rivedere i risultati.',

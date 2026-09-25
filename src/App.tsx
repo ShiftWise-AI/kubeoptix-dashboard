@@ -203,6 +203,20 @@ function extractCurrentFile(payload: unknown): string | null {
   return typeof currentFile === 'string' && currentFile.trim() ? currentFile : null
 }
 
+function extractFileProgress(payload: unknown): { processed: number; total: number } {
+  if (typeof payload !== 'object' || payload === null) {
+    return { processed: 0, total: 0 }
+  }
+
+  const value = payload as Record<string, unknown>
+  const processed = typeof value.files_processed === 'number' ? value.files_processed : 0
+  const total = typeof value.files_total === 'number' ? value.files_total : 0
+  return {
+    processed: Math.max(0, Math.floor(processed)),
+    total: Math.max(0, Math.floor(total)),
+  }
+}
+
 function normalizeAssessmentTree(
   payload: unknown,
   parentPath = '',
@@ -433,6 +447,7 @@ function App() {
   const [hasAnalyzerStarted, setHasAnalyzerStarted] = useState(false)
   const [analyzerProgress, setAnalyzerProgress] = useState(0)
   const [analyzerCurrentFile, setAnalyzerCurrentFile] = useState<string | null>(null)
+  const [analyzerFilesProgress, setAnalyzerFilesProgress] = useState({ processed: 0, total: 0 })
   const [analyzerCompletionMessage, setAnalyzerCompletionMessage] = useState<TranslationKey | null>(null)
   const [analyzerStatusError, setAnalyzerStatusError] = useState<string | null>(null)
   const [predictiveStatusError, setPredictiveStatusError] = useState<string | null>(null)
@@ -821,6 +836,7 @@ function App() {
 
         setAnalyzerProgress(progress)
         setAnalyzerCurrentFile(extractCurrentFile(result.payload))
+        setAnalyzerFilesProgress(extractFileProgress(result.payload))
         setPredictiveStatusError(null)
 
         if (progress >= 100) {
@@ -842,7 +858,7 @@ function App() {
         )
       }
 
-      pollingTimeout = window.setTimeout(pollPredictiveStatus, 2000)
+      pollingTimeout = window.setTimeout(pollPredictiveStatus, 750)
     }
 
     void pollPredictiveStatus()
@@ -874,12 +890,12 @@ function App() {
 
         setAnalyzerProgress(progress)
         setAnalyzerCurrentFile(extractCurrentFile(result.payload))
+        setAnalyzerFilesProgress(extractFileProgress(result.payload))
         setAnalyzerStatusError(null)
 
         if (progress >= 100) {
           setIsAnalyzerStatusPolling(false)
           setIsAnalyzerInProgress(false)
-          setAnalyzerCurrentFile(null)
           setRunResponse((previousState) => ({ ...previousState, pending: false }))
           setAnalyzerCompletionMessage('analyzer.analysisCompletedOpenReports')
           void loadAnalyzerReports()
@@ -895,7 +911,7 @@ function App() {
         )
       }
 
-      pollingTimeout = window.setTimeout(pollAnalyzerStatus, 2000)
+      pollingTimeout = window.setTimeout(pollAnalyzerStatus, 750)
     }
 
     void pollAnalyzerStatus()
@@ -1721,6 +1737,11 @@ function App() {
                       {isAnalyzerInProgress && analyzerCurrentFile ? (
                         <p className="collection-progress-file">
                           {t('analyzer.currentFile', { file: analyzerCurrentFile })}
+                        </p>
+                      ) : null}
+                      {analyzerFilesProgress.total > 0 ? (
+                        <p className="collection-progress-status">
+                          {t('analyzer.filesProgress', analyzerFilesProgress)}
                         </p>
                       ) : null}
                       {!predictiveStatusError && !analyzerStatusError ? (

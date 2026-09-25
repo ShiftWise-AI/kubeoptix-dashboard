@@ -90,6 +90,7 @@ const ptBR: TranslationDictionary = {
   'analyzer.modeLlm': 'LLM',
   'analyzer.currentFile': 'Processando arquivo: {{file}}',
   'analyzer.progress': 'Progresso do analyzer',
+  'analyzer.filesProgress': 'Arquivos processados: {{processed}} de {{total}}',
   'analyzer.analyzing': 'Analisando dados. O status é atualizado a cada 2 segundos.',
   'analyzer.analysisCompleted': 'Análise concluída.',
   'analyzer.analysisCompletedOpenReports': 'Análise concluída. Abra Relatórios para revisar os resultados.',

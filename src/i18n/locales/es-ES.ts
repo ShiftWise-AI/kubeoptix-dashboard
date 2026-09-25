@@ -90,6 +90,7 @@ const esES: TranslationDictionary = {
   'analyzer.modeLlm': 'LLM',
   'analyzer.currentFile': 'Procesando archivo: {{file}}',
   'analyzer.progress': 'Progreso del analyzer',
+  'analyzer.filesProgress': 'Archivos procesados: {{processed}} de {{total}}',
   'analyzer.analyzing': 'Analizando datos. El estado se actualiza cada 2 segundos.',
   'analyzer.analysisCompleted': 'Análisis completado.',
   'analyzer.analysisCompletedOpenReports': 'Análisis completado. Abra Informes para revisar los resultados.',

@@ -12,7 +12,8 @@ export function getApiPath(service: ApiService, path: string): string {
 export const ANALYZER_API_PATH = '/api/analyzer'
 export const ANALYZER_ASSESSMENT_NAMESPACES_PATH = `${ANALYZER_API_PATH}/assessment/namespaces`
 export const ANALYZER_RUN_PATH = `${ANALYZER_API_PATH}/run`
-export const ANALYZER_STATUS_PATH = `${ANALYZER_API_PATH}/status`
+// JSON status (progress + current_file), not the legacy plain-text /status endpoint.
+export const ANALYZER_STATUS_PATH = `${ANALYZER_API_PATH}/analysis/status`
 export const ANALYZER_CLEANUP_PATH = `${ANALYZER_API_PATH}/reports`
 export const ANALYZER_REPORT_FILES_PATH = `${ANALYZER_API_PATH}/reports/files`
 
