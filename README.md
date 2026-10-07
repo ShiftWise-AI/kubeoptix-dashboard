@@ -1,5 +1,7 @@
 # KubeOptix Dashboard
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch workflow and contribution process.
+
 React + TypeScript web dashboard for operating the ShiftWise AI / KubeOptix assessment workflow. The interface coordinates data collection, analysis, report editing, document versioning, and system configuration with PatternFly.
 
 ## Workflow overview
