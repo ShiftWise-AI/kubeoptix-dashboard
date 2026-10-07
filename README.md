@@ -257,6 +257,10 @@ oc get route kubeoptix-dashboard -n shiftwise-ai \
   -o jsonpath='https://{.spec.host}{"\n"}'
 ```
 
+## License
+
+This project is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for the full license text.
+
 ## Validation
 
 Run the automated checks:
